@@ -25,22 +25,22 @@ export const SalesFlow: React.FC<SalesFlowProps> = ({ leads, onAddLead, onUpdate
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col md:flex-row justify-between md:items-end gap-4">
         <div>
            <h2 className="text-2xl font-bold text-gray-800">Sales Pipeline</h2>
            <p className="text-gray-500">Track leads from inquiry to installation.</p>
         </div>
         
-        <form onSubmit={handleAdd} className="flex gap-2 items-end bg-white p-4 rounded-lg shadow-sm border">
-          <div>
+        <form onSubmit={handleAdd} className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end bg-white p-4 rounded-lg shadow-sm border">
+          <div className="flex-grow">
             <label className="block text-xs text-gray-500">Name</label>
-            <input required className="border rounded p-1 text-sm" value={newLead.name} onChange={e => setNewLead({...newLead, name: e.target.value})} />
+            <input required className="border rounded p-2 text-sm w-full" value={newLead.name} onChange={e => setNewLead({...newLead, name: e.target.value})} />
           </div>
-          <div>
+          <div className="flex-grow">
              <label className="block text-xs text-gray-500">Phone</label>
-             <input required className="border rounded p-1 text-sm" value={newLead.phone} onChange={e => setNewLead({...newLead, phone: e.target.value})} />
+             <input required className="border rounded p-2 text-sm w-full" value={newLead.phone} onChange={e => setNewLead({...newLead, phone: e.target.value})} />
           </div>
-          <button type="submit" className="bg-blue-600 text-white p-2 rounded text-sm font-medium hover:bg-blue-700">Add Lead</button>
+          <button type="submit" className="bg-blue-600 text-white p-2 rounded text-sm font-medium hover:bg-blue-700 whitespace-nowrap">Add Lead</button>
         </form>
       </div>
 

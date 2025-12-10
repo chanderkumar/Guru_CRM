@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Ticket, TicketStatus, Part, PaymentMode } from '../types';
-import { MapPin, Phone, Clock, Package, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { MapPin, Phone, Clock, Package, Check, ChevronDown, ChevronUp, Trash2, FileText } from 'lucide-react';
 
 interface TechnicianViewProps {
   tickets: Ticket[];
@@ -37,6 +37,13 @@ export const TechnicianView: React.FC<TechnicianViewProps> = ({ tickets, parts, 
       ...closureData,
       items: [...closureData.items, { partId: parts[0].id, quantity: 1 }]
     });
+  };
+  
+  const handleRemoveItem = (indexToRemove: number) => {
+    setClosureData(prev => ({
+      ...prev,
+      items: prev.items.filter((_, index) => index !== indexToRemove),
+    }));
   };
 
   const calculateTotal = () => {
@@ -116,6 +123,14 @@ export const TechnicianView: React.FC<TechnicianViewProps> = ({ tickets, parts, 
 
             {isOpen && ticket.status !== TicketStatus.COMPLETED && (
               <div className="bg-gray-50 p-4 border-t border-gray-100 animate-fade-in">
+                <div className="mb-4 border-b border-gray-200 pb-4">
+                  <h4 className="font-semibold text-gray-700 flex items-center gap-2 mb-1">
+                    <FileText size={16} />
+                    Problem Description
+                  </h4>
+                  <p className="text-gray-600 text-sm">{ticket.description}</p>
+                </div>
+                
                 {ticket.status === TicketStatus.ASSIGNED && (
                   <button 
                     onClick={(e) => { e.stopPropagation(); handleStartTicket(ticket); }}
@@ -133,9 +148,9 @@ export const TechnicianView: React.FC<TechnicianViewProps> = ({ tickets, parts, 
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-gray-500 uppercase">Parts Used</label>
                       {closureData.items.map((item, idx) => (
-                        <div key={idx} className="flex gap-2 mb-2">
+                        <div key={idx} className="flex gap-2 mb-1 items-center">
                           <select 
-                            className="flex-1 text-sm border rounded p-1"
+                            className="flex-1 text-sm border rounded p-1.5"
                             value={item.partId}
                             onChange={(e) => {
                               const newItems = [...closureData.items];
@@ -147,7 +162,7 @@ export const TechnicianView: React.FC<TechnicianViewProps> = ({ tickets, parts, 
                           </select>
                           <input 
                             type="number" 
-                            className="w-16 text-sm border rounded p-1"
+                            className="w-16 text-sm border rounded p-1.5"
                             value={item.quantity}
                             min={1}
                             onChange={(e) => {
@@ -156,9 +171,17 @@ export const TechnicianView: React.FC<TechnicianViewProps> = ({ tickets, parts, 
                               setClosureData({...closureData, items: newItems});
                             }}
                           />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(idx)}
+                            className="p-1 text-red-500 hover:bg-red-100 rounded"
+                            title="Remove Part"
+                          >
+                            <Trash2 size={16} />
+                          </button>
                         </div>
                       ))}
-                      <button onClick={handleAddItem} className="text-blue-600 text-sm flex items-center gap-1 font-medium">
+                      <button onClick={handleAddItem} className="text-blue-600 text-sm flex items-center gap-1 font-medium hover:underline">
                         <Package size={14} /> Add Part
                       </button>
                     </div>

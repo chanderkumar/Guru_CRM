@@ -121,7 +121,7 @@ export const CustomerMaster: React.FC<CustomerMasterProps> = ({ customers, onAdd
                   <h3 className="font-semibold text-gray-800">{customer.name}</h3>
                   <div className="flex items-center gap-2 text-sm text-gray-500">
                     <span>{customer.phone}</span>
-                    <span>•</span>
+                    <span className="hidden sm:inline">•</span>
                     <span className="flex items-center gap-1"><MapPin size={12}/> {customer.address}</span>
                   </div>
                 </div>
@@ -144,23 +144,25 @@ export const CustomerMaster: React.FC<CustomerMasterProps> = ({ customers, onAdd
                 <h4 className="text-sm font-bold text-gray-600 mb-3 uppercase tracking-wide">Installed Machines</h4>
                 <div className="grid gap-3">
                   {customer.machines.map((machine, idx) => (
-                    <div key={idx} className="bg-white p-3 rounded border border-gray-200 flex flex-wrap gap-4 items-center">
-                      <div className="min-w-[150px]">
-                        <p className="text-xs text-gray-500">Model</p>
-                        <p className="font-medium text-slate-800">{machine.modelNo}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Installation Date</p>
-                        <p className="text-sm">{machine.installationDate}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Warranty Expiry</p>
-                        <p className={`text-sm font-medium ${new Date(machine.warrantyExpiry) > new Date() ? 'text-green-600' : 'text-red-600'}`}>
-                          {machine.warrantyExpiry}
-                        </p>
+                    <div key={idx} className="bg-white p-3 rounded border border-gray-200 flex flex-col lg:flex-row lg:items-center gap-4">
+                      <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        <div className="min-w-[120px]">
+                          <p className="text-xs text-gray-500">Model</p>
+                          <p className="font-medium text-slate-800">{machine.modelNo}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Installation Date</p>
+                          <p className="text-sm">{machine.installationDate}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Warranty Expiry</p>
+                          <p className={`text-sm font-medium ${new Date(machine.warrantyExpiry) > new Date() ? 'text-green-600' : 'text-red-600'}`}>
+                            {machine.warrantyExpiry}
+                          </p>
+                        </div>
                       </div>
                       
-                      <div className="flex items-center gap-2 ml-auto">
+                      <div className="flex items-center gap-2 border-t pt-2 lg:border-t-0 lg:pt-0">
                         {machine.amcActive ? (
                            <div className="flex items-center gap-1 text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
                              <Shield size={12} /> AMC Active ({machine.amcExpiry})

@@ -190,6 +190,9 @@ const App: React.FC = () => {
               technicians={technicians} 
               onAssign={handleAssignTicket} 
               onCreateTicket={handleCreateTicket}
+              // FIX: Pass missing customers and onAddCustomer props.
+              customers={customers}
+              onAddCustomer={handleAddCustomer}
             />
           )}
           {activeTab === 'technician' && (

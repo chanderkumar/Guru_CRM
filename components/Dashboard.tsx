@@ -77,8 +77,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ tickets }) => {
             <PieChart>
               <Pie
                 data={statusData}
-                cx="40%"
-                cy="50%"
                 innerRadius={60}
                 outerRadius={80}
                 fill="#8884d8"
@@ -91,10 +89,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ tickets }) => {
               </Pie>
               <Tooltip />
               <Legend 
-                layout="vertical" 
-                verticalAlign="middle" 
-                align="right" 
-                wrapperStyle={{ paddingLeft: '20px' }}
+                verticalAlign="bottom"
+                layout="horizontal"
+                iconSize={10}
               />
             </PieChart>
           </ResponsiveContainer>
