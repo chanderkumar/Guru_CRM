@@ -70,14 +70,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ tickets }) => {
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 h-80">
-          <h3 className="text-lg font-semibold mb-4">Ticket Status Distribution</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 h-96 flex flex-col">
+          <h3 className="text-lg font-semibold text-gray-700 mb-4 flex-shrink-0">Ticket Status Distribution</h3>
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={statusData}
-                cx="50%"
+                cx="40%"
                 cy="50%"
                 innerRadius={60}
                 outerRadius={80}
@@ -90,13 +90,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ tickets }) => {
                 ))}
               </Pie>
               <Tooltip />
-              <!--Legend --/>
+              <Legend 
+                layout="vertical" 
+                verticalAlign="middle" 
+                align="right" 
+                wrapperStyle={{ paddingLeft: '20px' }}
+              />
             </PieChart>
           </ResponsiveContainer>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 h-80">
-           <h3 className="text-lg font-semibold mb-4">Technician Performance (Mock)</h3>
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 h-96 flex flex-col">
+           <h3 className="text-lg font-semibold text-gray-700 mb-4 flex-shrink-0">Technician Performance (Mock)</h3>
            <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={[
@@ -104,13 +109,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ tickets }) => {
                 { name: 'Suresh', completed: 18, pending: 2 },
                 { name: 'Mahesh', completed: 5, pending: 8 },
               ]}
-              margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+              margin={{ top: 20, right: 30, left: 0, bottom: 5 }}
             >
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" />
               <YAxis />
               <Tooltip />
-              <Legend />
+              <Legend verticalAlign="top" />
               <Bar dataKey="completed" fill="#10B981" />
               <Bar dataKey="pending" fill="#F59E0B" />
             </BarChart>

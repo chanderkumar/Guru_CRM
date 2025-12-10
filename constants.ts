@@ -7,7 +7,7 @@ export const USERS: User[] = [
   { id: 'u4', name: 'Manager Boss', role: Role.MANAGER },
 ];
 
-export const PARTS_MASTER: Part[] = [
+export const MOCK_PARTS: Part[] = [
   { id: 'p1', name: 'RO Membrane 100GPD', category: 'Filters', price: 1200, warrantyMonths: 12 },
   { id: 'p2', name: 'Sediment Filter', category: 'Filters', price: 350, warrantyMonths: 0 },
   { id: 'p3', name: 'Carbon Filter', category: 'Filters', price: 400, warrantyMonths: 0 },

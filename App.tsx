@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { USERS, MOCK_TICKETS, PARTS_MASTER, MOCK_CUSTOMERS, MOCK_LEADS } from './constants';
-import { Ticket, User, Role, TicketStatus, Lead, LeadStatus, Customer, Machine } from './types';
+import { USERS, MOCK_TICKETS, MOCK_PARTS, MOCK_CUSTOMERS, MOCK_LEADS } from './constants';
+import { Ticket, User, Role, TicketStatus, Lead, LeadStatus, Customer, Machine, Part } from './types';
 import { Dashboard } from './components/Dashboard';
 import { TicketBoard } from './components/TicketBoard';
 import { TechnicianView } from './components/TechnicianView';
 import { SalesFlow } from './components/SalesFlow';
 import { CustomerMaster } from './components/CustomerMaster';
-import { LayoutDashboard, Ticket as TicketIcon, Users, ShoppingCart, Wrench } from 'lucide-react';
+import { PartsMaster } from './components/PartsMaster';
+import { LayoutDashboard, Ticket as TicketIcon, Users, ShoppingCart, Wrench, Package, Menu, X } from 'lucide-react';
 
 const App: React.FC = () => {
   // Global State (Mocking a database)
@@ -14,7 +15,9 @@ const App: React.FC = () => {
   const [tickets, setTickets] = useState<Ticket[]>(MOCK_TICKETS);
   const [leads, setLeads] = useState<Lead[]>(MOCK_LEADS);
   const [customers, setCustomers] = useState<Customer[]>(MOCK_CUSTOMERS);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'tickets' | 'sales' | 'technician' | 'customers'>('dashboard');
+  const [parts, setParts] = useState<Part[]>(MOCK_PARTS);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'tickets' | 'sales' | 'technician' | 'customers' | 'parts'>('dashboard');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Technician users helper
   const technicians = USERS.filter(u => u.role === Role.TECHNICIAN);
@@ -60,6 +63,10 @@ const App: React.FC = () => {
       return c;
     }));
   };
+  
+  const handleAddPart = (part: Part) => {
+    setParts([...parts, part]);
+  };
 
   // Effect to handle Role Switching automatically for demo purposes
   useEffect(() => {
@@ -70,58 +77,94 @@ const App: React.FC = () => {
     }
   }, [currentUser, activeTab]);
 
-  return (
-    <div className="flex min-h-screen bg-gray-50">
-      {/* Sidebar */}
-      <aside className="w-64 bg-slate-900 text-white hidden md:flex flex-col fixed h-full z-10">
-        <div className="p-6 border-b border-slate-700">
-          <h1 className="text-2xl font-bold text-red-500">Sai<span className="text-white text-lg font-normal ml-2">Tech</span></h1>
-          <p className="text-xs text-slate-400 mt-1">Guru Technologies ERP</p>
-        </div>
+  const navigate = (tab: typeof activeTab) => {
+    setActiveTab(tab);
+    setIsSidebarOpen(false);
+  }
 
-        <nav className="flex-1 p-4 space-y-2">
-          {currentUser.role !== Role.TECHNICIAN && (
-            <>
-              <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'dashboard' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}>
-                <LayoutDashboard size={20} /> Dashboard
-              </button>
-              <button onClick={() => setActiveTab('tickets')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'tickets' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}>
-                <TicketIcon size={20} /> Service Tickets
-              </button>
-              <button onClick={() => setActiveTab('sales')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'sales' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}>
-                <ShoppingCart size={20} /> Sales Pipeline
-              </button>
-              <button onClick={() => setActiveTab('customers')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'customers' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}>
-                <Users size={20} /> Customers
-              </button>
-            </>
-          )}
-          
-          {currentUser.role === Role.TECHNICIAN && (
-             <button onClick={() => setActiveTab('technician')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'technician' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}>
-             <Wrench size={20} /> My Work
-           </button>
-          )}
-        </nav>
+  const renderSidebarContent = () => (
+    <>
+      <div className="p-6 border-b border-slate-700">
+        <h1 className="text-2xl font-bold text-red-500">Sai<span className="text-white text-lg font-normal ml-2">Tech</span></h1>
+        <p className="text-xs text-slate-400 mt-1">Guru Technologies ERP</p>
+      </div>
 
-        <div className="p-4 border-t border-slate-700">
-          <div className="flex items-center gap-3 px-4 py-2">
-            <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center font-bold">
-              {currentUser.name.charAt(0)}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{currentUser.name}</p>
-              <p className="text-xs text-slate-400 truncate">{currentUser.role}</p>
-            </div>
+      <nav className="flex-1 p-4 space-y-2">
+        {currentUser.role !== Role.TECHNICIAN && (
+          <>
+            <button onClick={() => navigate('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'dashboard' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}>
+              <LayoutDashboard size={20} /> Dashboard
+            </button>
+            <button onClick={() => navigate('tickets')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'tickets' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}>
+              <TicketIcon size={20} /> Service Tickets
+            </button>
+            <button onClick={() => navigate('sales')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'sales' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}>
+              <ShoppingCart size={20} /> Sales Pipeline
+            </button>
+            <button onClick={() => navigate('customers')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'customers' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}>
+              <Users size={20} /> Customers
+            </button>
+             <button onClick={() => navigate('parts')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'parts' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}>
+              <Package size={20} /> Parts Master
+            </button>
+          </>
+        )}
+        
+        {currentUser.role === Role.TECHNICIAN && (
+           <button onClick={() => navigate('technician')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'technician' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}>
+           <Wrench size={20} /> My Work
+         </button>
+        )}
+      </nav>
+
+      <div className="p-4 border-t border-slate-700">
+        <div className="flex items-center gap-3 px-4 py-2">
+          <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center font-bold">
+            {currentUser.name.charAt(0)}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate">{currentUser.name}</p>
+            <p className="text-xs text-slate-400 truncate">{currentUser.role}</p>
           </div>
         </div>
+      </div>
+    </>
+  );
+
+  return (
+    <div className="flex min-h-screen bg-gray-50">
+      {/* Sidebar - Static for large screens */}
+      <aside className="w-64 bg-slate-900 text-white hidden md:flex flex-col fixed h-full z-20">
+        {renderSidebarContent()}
       </aside>
+
+      {/* Mobile Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-30 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+          aria-hidden="true"
+        ></div>
+      )}
+
+      {/* Sidebar - Mobile slide-in */}
+      <aside
+        className={`fixed top-0 left-0 h-full w-64 bg-slate-900 text-white flex flex-col z-40 transition-transform transform ${
+          isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        } md:hidden`}
+      >
+        {renderSidebarContent()}
+      </aside>
+
 
       {/* Main Content */}
       <main className="flex-1 md:ml-64 p-4 md:p-8">
         
-        {/* Mobile Header / Top Bar for Role Switching */}
+        {/* Top Bar with Role Switching and Mobile Menu */}
         <header className="flex justify-between items-center mb-8 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+          <button className="md:hidden text-gray-600" onClick={() => setIsSidebarOpen(true)}>
+            <Menu size={24} />
+          </button>
           <div className="md:hidden font-bold text-gray-800">GuruTech ERP</div>
           
           <div className="flex items-center gap-4 ml-auto">
@@ -152,7 +195,7 @@ const App: React.FC = () => {
           {activeTab === 'technician' && (
             <TechnicianView 
               tickets={tickets} 
-              parts={PARTS_MASTER} 
+              parts={parts} 
               onUpdateTicket={handleUpdateTicket}
               currentUserId={currentUser.id}
             />
@@ -169,6 +212,12 @@ const App: React.FC = () => {
                customers={customers} 
                onAddCustomer={handleAddCustomer}
                onAddMachine={handleAddMachine}
+             />
+          )}
+          {activeTab === 'parts' && (
+             <PartsMaster 
+               parts={parts} 
+               onAddPart={handleAddPart}
              />
           )}
         </div>
