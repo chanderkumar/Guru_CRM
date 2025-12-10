@@ -90,7 +90,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ tickets }) => {
                 ))}
               </Pie>
               <Tooltip />
-              <Legend />
+              <!--Legend --/>
             </PieChart>
           </ResponsiveContainer>
         </div>
