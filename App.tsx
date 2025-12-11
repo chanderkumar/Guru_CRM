@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
-import { USERS, MOCK_TICKETS, MOCK_PARTS, MOCK_CUSTOMERS, MOCK_LEADS } from './constants';
+import { USERS } from './constants';
 import { Ticket, User, Role, TicketStatus, Lead, LeadStatus, Customer, Machine, Part } from './types';
 import { Dashboard } from './components/Dashboard';
 import { TicketBoard } from './components/TicketBoard';
@@ -7,27 +8,66 @@ import { TechnicianView } from './components/TechnicianView';
 import { SalesFlow } from './components/SalesFlow';
 import { CustomerMaster } from './components/CustomerMaster';
 import { PartsMaster } from './components/PartsMaster';
-import { LayoutDashboard, Ticket as TicketIcon, Users, ShoppingCart, Wrench, Package, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Ticket as TicketIcon, Users, ShoppingCart, Wrench, Package, Menu, Database, AlertCircle, RefreshCw } from 'lucide-react';
+import { api } from './api';
 
 const App: React.FC = () => {
-  // Global State (Mocking a database)
-  const [currentUser, setCurrentUser] = useState<User>(USERS[0]); // Default Admin
-  const [tickets, setTickets] = useState<Ticket[]>(MOCK_TICKETS);
-  const [leads, setLeads] = useState<Lead[]>(MOCK_LEADS);
-  const [customers, setCustomers] = useState<Customer[]>(MOCK_CUSTOMERS);
-  const [parts, setParts] = useState<Part[]>(MOCK_PARTS);
+  const [currentUser, setCurrentUser] = useState<User>(USERS[0]);
+  
+  // State for Data
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [parts, setParts] = useState<Part[]>([]);
+  
+  // UI State
   const [activeTab, setActiveTab] = useState<'dashboard' | 'tickets' | 'sales' | 'technician' | 'customers' | 'parts'>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
+
+  // Load Data on Mount
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    const data = await api.fetchAllData();
+    setTickets(data.tickets);
+    setCustomers(data.customers);
+    setLeads(data.leads);
+    setParts(data.parts);
+    setIsOfflineMode(data.isOffline);
+    setIsLoading(false);
+  };
 
   // Technician users helper
   const technicians = USERS.filter(u => u.role === Role.TECHNICIAN);
 
-  // Handlers
-  const handleAssignTicket = (ticketId: string, techId: string) => {
-    setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, assignedTechnicianId: techId, status: TicketStatus.ASSIGNED } : t));
+  // --- Handlers (Now Async with Error Handling) ---
+
+  const handleAssignTicket = async (ticketId: string, techId: string) => {
+    const previousTickets = [...tickets];
+    const updatedTicket = tickets.find(t => t.id === ticketId);
+    if (!updatedTicket) return;
+    
+    const newTicket = { ...updatedTicket, assignedTechnicianId: techId, status: TicketStatus.ASSIGNED };
+    
+    // Optimistic Update
+    setTickets(prev => prev.map(t => t.id === ticketId ? newTicket : t));
+    
+    try {
+      if (!isOfflineMode) await api.updateTicket(newTicket);
+    } catch (error) {
+      console.error("Failed to assign ticket:", error);
+      alert("Failed to assign ticket on server. Reverting changes.");
+      setTickets(previousTickets);
+    }
   };
 
-  const handleCreateTicket = (ticket: Partial<Ticket>) => {
+  const handleCreateTicket = async (ticket: Partial<Ticket>) => {
+    const previousTickets = [...tickets];
     const newTicketObj: Ticket = {
       id: `t${Date.now()}`,
       itemsUsed: [],
@@ -36,39 +76,101 @@ const App: React.FC = () => {
       status: TicketStatus.PENDING,
       ...ticket
     } as Ticket;
+    
     setTickets([...tickets, newTicketObj]);
+    
+    try {
+      if (!isOfflineMode) await api.createTicket(newTicketObj);
+    } catch (error) {
+      console.error("Failed to create ticket:", error);
+      alert("Failed to create ticket on server. Please try again.");
+      setTickets(previousTickets);
+    }
   };
 
-  const handleUpdateTicket = (updatedTicket: Ticket) => {
+  const handleUpdateTicket = async (updatedTicket: Ticket) => {
+    const previousTickets = [...tickets];
     setTickets(prev => prev.map(t => t.id === updatedTicket.id ? updatedTicket : t));
+    
+    try {
+      if (!isOfflineMode) await api.updateTicket(updatedTicket);
+    } catch (error) {
+      console.error("Failed to update ticket:", error);
+      alert("Failed to save ticket update. Reverting changes.");
+      setTickets(previousTickets);
+    }
   };
 
-  const handleAddLead = (lead: Lead) => {
+  const handleAddLead = async (lead: Lead) => {
+    const previousLeads = [...leads];
     setLeads([...leads, lead]);
+    
+    try {
+      if (!isOfflineMode) await api.createLead(lead);
+    } catch (error) {
+      console.error("Failed to add lead:", error);
+      alert("Failed to save lead to server. Please try again.");
+      setLeads(previousLeads);
+    }
   };
 
-  const handleUpdateLeadStatus = (id: string, status: LeadStatus, extraData: Partial<Lead> = {}) => {
+  const handleUpdateLeadStatus = async (id: string, status: LeadStatus, extraData: Partial<Lead> = {}) => {
+    const previousLeads = [...leads];
     setLeads(prev => prev.map(l => l.id === id ? { ...l, status, ...extraData } : l));
+    
+    try {
+      if (!isOfflineMode) await api.updateLeadStatus(id, status, extraData);
+    } catch (error) {
+      console.error("Failed to update lead status:", error);
+      alert("Failed to update lead status on server. Reverting.");
+      setLeads(previousLeads);
+    }
   };
 
-  const handleAddCustomer = (customer: Customer) => {
+  const handleAddCustomer = async (customer: Customer) => {
+    const previousCustomers = [...customers];
     setCustomers([...customers, customer]);
+    
+    try {
+      if (!isOfflineMode) await api.createCustomer(customer);
+    } catch (error) {
+      console.error("Failed to add customer:", error);
+      alert("Failed to save customer to server. Please try again.");
+      setCustomers(previousCustomers);
+    }
   };
 
-  const handleAddMachine = (customerId: string, machine: Machine) => {
+  const handleAddMachine = async (customerId: string, machine: Machine) => {
+    const previousCustomers = [...customers];
     setCustomers(prev => prev.map(c => {
       if (c.id === customerId) {
         return { ...c, machines: [...c.machines, machine] };
       }
       return c;
     }));
+    
+    try {
+      if (!isOfflineMode) await api.addMachine(customerId, machine);
+    } catch (error) {
+      console.error("Failed to add machine:", error);
+      alert("Failed to save machine details. Reverting.");
+      setCustomers(previousCustomers);
+    }
   };
   
-  const handleAddPart = (part: Part) => {
+  const handleAddPart = async (part: Part) => {
+    const previousParts = [...parts];
     setParts([...parts, part]);
+    
+    try {
+      if (!isOfflineMode) await api.createPart(part);
+    } catch (error) {
+      console.error("Failed to add part:", error);
+      alert("Failed to save part to server. Please try again.");
+      setParts(previousParts);
+    }
   };
 
-  // Effect to handle Role Switching automatically for demo purposes
   useEffect(() => {
     if (currentUser.role === Role.TECHNICIAN) {
       setActiveTab('technician');
@@ -116,6 +218,21 @@ const App: React.FC = () => {
          </button>
         )}
       </nav>
+      
+      {/* Server Status Indicator */}
+      <div className="p-4 border-t border-slate-700 bg-slate-900/50">
+        <div className="flex items-center gap-2 text-xs">
+          <Database size={14} className={isOfflineMode ? "text-orange-500" : "text-green-500"} />
+          <span className="text-slate-300">
+            {isOfflineMode ? "Running in Mock Mode" : "Connected to SQL DB"}
+          </span>
+        </div>
+        {isOfflineMode && (
+          <button onClick={loadData} className="mt-2 text-xs text-blue-400 flex items-center gap-1 hover:text-blue-300">
+            <RefreshCw size={12} /> Retry Connection
+          </button>
+        )}
+      </div>
 
       <div className="p-4 border-t border-slate-700">
         <div className="flex items-center gap-3 px-4 py-2">
@@ -130,6 +247,15 @@ const App: React.FC = () => {
       </div>
     </>
   );
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 flex-col gap-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <p className="text-gray-500 font-medium">Loading ERP System...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -168,6 +294,11 @@ const App: React.FC = () => {
           <div className="md:hidden font-bold text-gray-800">GuruTech ERP</div>
           
           <div className="flex items-center gap-4 ml-auto">
+            {isOfflineMode && (
+               <div className="hidden sm:flex items-center gap-1 text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded-full border border-orange-200">
+                 <AlertCircle size={14} /> Server Offline - Changes will not be saved
+               </div>
+            )}
             <span className="text-sm text-gray-500 hidden md:inline">Viewing as:</span>
             <select 
               className="bg-gray-100 border-none rounded-lg px-3 py-1.5 text-sm font-medium cursor-pointer focus:ring-2 focus:ring-blue-500 outline-none"
@@ -190,7 +321,6 @@ const App: React.FC = () => {
               technicians={technicians} 
               onAssign={handleAssignTicket} 
               onCreateTicket={handleCreateTicket}
-              // FIX: Pass missing customers and onAddCustomer props.
               customers={customers}
               onAddCustomer={handleAddCustomer}
             />
