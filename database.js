@@ -7,8 +7,6 @@ let db;
 export async function initDb() {
   if (db) return db;
 
-  // sqlite3.verbose() is a function on the default export in some environments,
-  // or on the namespace. We use the standard import and call verbose() on it.
   const sqlite3Verbose = sqlite3.verbose();
 
   db = await open({
@@ -47,7 +45,7 @@ export async function initDb() {
       assignedTechnicianId TEXT,
       scheduledDate TEXT,
       completedDate TEXT,
-      itemsUsed TEXT, -- JSON stored as string
+      itemsUsed TEXT,
       serviceCharge REAL,
       totalAmount REAL,
       paymentMode TEXT,
@@ -91,8 +89,43 @@ export async function initDb() {
       scheduledDate TEXT,
       FOREIGN KEY(ticketId) REFERENCES tickets(id)
     );
+
+    -- Dropping old users table if it exists without email column to ensure migration
+    -- In a production environment, you would use ALTER TABLE
+    -- CREATE TABLE IF NOT EXISTS users ( ... );
+  `);
+
+  // Check if users table has the new schema, if not drop and recreate (Simple migration for dev)
+  try {
+      await db.get('SELECT email FROM users LIMIT 1');
+  } catch (e) {
+      // Column email likely doesn't exist, drop and recreate
+      await db.exec('DROP TABLE IF EXISTS users');
+  }
+
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      email TEXT UNIQUE,
+      password TEXT,
+      role TEXT,
+      phone TEXT,
+      address TEXT,
+      status TEXT DEFAULT 'Active'
+    );
   `);
   
+  // Seed Default Admin User if empty
+  const userCount = await db.get('SELECT count(*) as count FROM users');
+  if (userCount.count === 0) {
+      console.log("Seeding default admin user...");
+      const stmt = await db.prepare('INSERT INTO users (id, name, email, password, role, phone, address, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+      // Default Password: admin123
+      await stmt.run('u1', 'Super Admin', 'admin@guru.com', 'admin123', 'Admin', '9999999999', 'Head Office', 'Active');
+      await stmt.finalize();
+  }
+
   console.log("Database initialized and tables checked.");
   return db;
 }

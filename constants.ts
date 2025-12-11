@@ -1,10 +1,11 @@
+
 import { Customer, CustomerType, Part, Role, Ticket, TicketPriority, TicketStatus, User, Lead, LeadStatus } from './types';
 
 export const USERS: User[] = [
-  { id: 'u1', name: 'Admin User', role: Role.ADMIN },
-  { id: 'u2', name: 'Ramesh Tech', role: Role.TECHNICIAN },
-  { id: 'u3', name: 'Suresh Tech', role: Role.TECHNICIAN },
-  { id: 'u4', name: 'Manager Boss', role: Role.MANAGER },
+  { id: 'u1', name: 'Admin User', role: Role.ADMIN, email: 'admin@guru.com', status: 'Active' },
+  { id: 'u2', name: 'Ramesh Tech', role: Role.TECHNICIAN, email: 'ramesh@guru.com', status: 'Active' },
+  { id: 'u3', name: 'Suresh Tech', role: Role.TECHNICIAN, email: 'suresh@guru.com', status: 'Active' },
+  { id: 'u4', name: 'Manager Boss', role: Role.MANAGER, email: 'manager@guru.com', status: 'Active' },
 ];
 
 export const MOCK_PARTS: Part[] = [

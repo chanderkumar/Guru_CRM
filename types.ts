@@ -121,5 +121,10 @@ export interface Lead {
 export interface User {
   id: string;
   name: string;
+  email: string;
+  password?: string; // Optional on frontend, mandatory on creation
   role: Role;
+  phone?: string;
+  address?: string;
+  status: 'Active' | 'Inactive';
 }

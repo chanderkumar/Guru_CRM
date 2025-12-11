@@ -1,22 +1,34 @@
 
-import { Ticket, Customer, Lead, Part, Machine, LeadStatus, AssignmentHistory, MachineType } from './types';
+import { Ticket, Customer, Lead, Part, Machine, LeadStatus, AssignmentHistory, MachineType, User } from './types';
 import { MOCK_TICKETS, MOCK_CUSTOMERS, MOCK_LEADS, MOCK_PARTS } from './constants';
 
 const API_URL = 'http://localhost:3001/api';
 
-// Helper to handle fetch errors (e.g., if server is not running)
 const safeFetch = async (url: string, options?: RequestInit) => {
   try {
     const res = await fetch(url, options);
-    if (!res.ok) throw new Error(`API Error: ${res.statusText}`);
+    if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `API Error: ${res.statusText}`);
+    }
     return await res.json();
   } catch (err) {
+    if (url.includes('login')) throw err; // Don't mock login failures, throw real error
     console.warn(`Server unreachable (${url}). Using Mock Data fallback.`, err);
     throw err;
   }
 };
 
 export const api = {
+  // --- Auth ---
+  login: async (email, password) => {
+    return await safeFetch(`${API_URL}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+    });
+  },
+
   // --- Initialization ---
   fetchAllData: async () => {
     try {
@@ -27,6 +39,7 @@ export const api = {
         leads: data.leads as Lead[],
         parts: data.parts as Part[],
         machineTypes: (data.machineTypes || []) as MachineType[],
+        users: (data.users || []) as User[],
         isOffline: false
       };
     } catch (error) {
@@ -37,6 +50,7 @@ export const api = {
         leads: MOCK_LEADS,
         parts: MOCK_PARTS,
         machineTypes: [],
+        users: [],
         isOffline: true
       };
     }
@@ -119,4 +133,27 @@ export const api = {
       body: JSON.stringify(machineType),
     });
   },
+
+  // --- Users ---
+  createUser: async (user: User) => {
+    return await safeFetch(`${API_URL}/users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(user),
+    });
+  },
+  
+  updateUser: async (id: string, updates: Partial<User>) => {
+    return await safeFetch(`${API_URL}/users/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+    });
+  },
+
+  deleteUser: async (id: string) => {
+    return await safeFetch(`${API_URL}/users/${id}`, {
+        method: 'DELETE',
+    });
+  }
 };
