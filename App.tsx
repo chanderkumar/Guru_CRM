@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { USERS } from './constants';
-import { Ticket, User, Role, TicketStatus, Lead, LeadStatus, Customer, Machine, Part, MachineType, TicketPriority } from './types';
+import { Ticket, User, Role, TicketStatus, Lead, LeadStatus, Customer, Machine, Part, MachineType, TicketPriority, AmcExpiry } from './types';
 import { Dashboard } from './components/Dashboard';
 import { TicketBoard } from './components/TicketBoard';
 import { TechnicianView } from './components/TechnicianView';
@@ -10,8 +10,9 @@ import { CustomerMaster } from './components/CustomerMaster';
 import { PartsMaster } from './components/PartsMaster';
 import { MachineMaster } from './components/MachineMaster';
 import { UserManagement } from './components/UserManagement';
+import { Reports } from './components/Reports';
 import { Login } from './components/Login';
-import { LayoutDashboard, Ticket as TicketIcon, Users, ShoppingCart, Wrench, Package, Menu, Database, AlertCircle, RefreshCw, Monitor, X, Shield, LogOut } from 'lucide-react';
+import { LayoutDashboard, Ticket as TicketIcon, Users, ShoppingCart, Wrench, Package, Menu, Database, AlertCircle, RefreshCw, Monitor, X, Shield, LogOut, BarChart3 } from 'lucide-react';
 import { api } from './api';
 
 const App: React.FC = () => {
@@ -30,6 +31,7 @@ const App: React.FC = () => {
   const [parts, setParts] = useState<Part[]>([]);
   const [machineTypes, setMachineTypes] = useState<MachineType[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [amcExpiries, setAmcExpiries] = useState<AmcExpiry[]>([]);
 
   // Technicians (Derived from users state)
   const technicians = users.filter(u => u.role === Role.TECHNICIAN);
@@ -63,6 +65,9 @@ const App: React.FC = () => {
       setMachineTypes(data.machineTypes);
       if (data.users && data.users.length > 0) {
         setUsers(data.users);
+      }
+      if (data.amcExpiries) {
+          setAmcExpiries(data.amcExpiries);
       }
       setIsOffline(data.isOffline);
     } catch (e) {
@@ -121,8 +126,32 @@ const App: React.FC = () => {
     const ticketIndex = tickets.findIndex(t => t.id === updatedTicket.id);
     const oldTicket = tickets[ticketIndex];
     setTickets(prev => prev.map(t => t.id === updatedTicket.id ? updatedTicket : t));
-    try { await api.updateTicket(updatedTicket); } 
+    try { 
+        await api.updateTicket(updatedTicket); 
+        // Reload parts stock if completed
+        if (updatedTicket.status === TicketStatus.COMPLETED) loadData(); 
+    } 
     catch (error) { alert("Failed. Reverting."); setTickets(prev => { const n = [...prev]; n[ticketIndex] = oldTicket; return n; }); }
+  };
+
+  const handleCancelTicket = async (ticketId: string, reason: string) => {
+      const ticketIndex = tickets.findIndex(t => t.id === ticketId);
+      if (ticketIndex === -1) return;
+      const oldTicket = tickets[ticketIndex];
+      const updatedTicket = { 
+          ...oldTicket, 
+          status: TicketStatus.CANCELLED, 
+          cancellationReason: reason 
+      };
+      
+      setTickets(prev => prev.map(t => t.id === ticketId ? updatedTicket : t));
+      
+      try {
+          await api.updateTicket(updatedTicket);
+      } catch (error) {
+          alert("Failed to cancel ticket. Reverting.");
+          setTickets(prev => { const n = [...prev]; n[ticketIndex] = oldTicket; return n; });
+      }
   };
 
   const handleAddCustomer = async (newCustomer: Customer) => {
@@ -132,10 +161,52 @@ const App: React.FC = () => {
   };
 
   const handleAddMachine = async (customerId: string, machine: Machine) => {
-    setCustomers(prev => prev.map(c => c.id === customerId ? { ...c, machines: [...c.machines, machine] } : c));
-    try { await api.addMachine(customerId, machine); } 
-    catch (error) { alert("Failed. Reverting."); loadData(); }
+    // Optimistic update difficult without ID from server, so we'll just reload or handle in success
+    try { 
+        const res = await api.addMachine(customerId, machine); 
+        if(res.success && res.id) {
+            const machineWithId = { ...machine, id: res.id };
+            setCustomers(prev => prev.map(c => c.id === customerId ? { ...c, machines: [...c.machines, machineWithId] } : c));
+        }
+    } 
+    catch (error) { alert("Failed to add machine."); }
   };
+
+  const handleUpdateMachine = async (customerId: string, machineId: string | number, updatedMachine: Machine) => {
+      const customerIndex = customers.findIndex(c => c.id === customerId);
+      const oldCustomers = [...customers];
+      
+      const newCustomers = [...customers];
+      const customer = newCustomers[customerIndex];
+      customer.machines = customer.machines.map(m => m.id === machineId ? { ...updatedMachine, id: machineId } : m);
+      
+      setCustomers(newCustomers);
+
+      try {
+          await api.updateMachine(machineId, updatedMachine);
+      } catch (e) {
+          alert("Failed to update machine.");
+          setCustomers(oldCustomers);
+      }
+  };
+
+  const handleDeleteMachine = async (customerId: string, machineId: string | number) => {
+      const customerIndex = customers.findIndex(c => c.id === customerId);
+      const oldCustomers = [...customers];
+
+      const newCustomers = [...customers];
+      const customer = newCustomers[customerIndex];
+      customer.machines = customer.machines.filter(m => m.id !== machineId);
+
+      setCustomers(newCustomers);
+
+      try {
+          await api.deleteMachine(machineId);
+      } catch (e) {
+          alert("Failed to delete machine.");
+          setCustomers(oldCustomers);
+      }
+  }
 
   const handleAddLead = async (lead: Lead) => {
     setLeads(prev => [...prev, lead]);
@@ -143,20 +214,47 @@ const App: React.FC = () => {
     catch (error) { alert("Failed. Reverting."); setLeads(prev => prev.filter(l => l.id !== lead.id)); }
   };
 
-  const handleUpdateLeadStatus = async (id: string, status: LeadStatus, extraData?: Partial<Lead>) => {
+  const handleUpdateLead = async (id: string, updates: Partial<Lead>) => {
     const leadIndex = leads.findIndex(l => l.id === id);
     const oldLead = leads[leadIndex];
-    const updatedLead = { ...oldLead, status, ...extraData };
+    const updatedLead = { ...oldLead, ...updates };
     setLeads(prev => prev.map(l => l.id === id ? updatedLead : l));
-    try { await api.updateLeadStatus(id, status, extraData); } 
+    try { await api.updateLead(id, updates); } 
     catch (error) { alert("Failed. Reverting."); setLeads(prev => { const n = [...prev]; n[leadIndex] = oldLead; return n; }); }
   };
+
+  const handleDeleteLead = async (id: string) => {
+      const oldLeads = [...leads];
+      setLeads(prev => prev.filter(l => l.id !== id));
+      try { await api.deleteLead(id); }
+      catch (error) { alert("Failed. Reverting."); setLeads(oldLeads); }
+  }
+
+  const handleConvertLead = async (id: string) => {
+      try {
+          const res = await api.convertLeadToCustomer(id);
+          if (res.success) {
+              await loadData(); // Reload to get new customer and updated lead status
+              alert("Lead converted successfully!");
+          }
+      } catch (error) {
+          alert("Conversion failed.");
+      }
+  }
 
   const handleAddPart = async (part: Part) => {
     setParts(prev => [...prev, part]);
     try { await api.createPart(part); } 
     catch (error) { alert("Failed. Reverting."); setParts(prev => prev.filter(p => p.id !== part.id)); }
   };
+
+  const handleUpdatePart = async (part: Part) => {
+      const idx = parts.findIndex(p => p.id === part.id);
+      const oldPart = parts[idx];
+      setParts(prev => prev.map(p => p.id === part.id ? part : p));
+      try { await api.updatePart(part); }
+      catch (e) { alert("Failed update"); setParts(prev => { const n = [...prev]; n[idx] = oldPart; return n; }); }
+  }
 
   const handleAddMachineType = async (type: MachineType) => {
       setMachineTypes(prev => [...prev, type]);
@@ -197,6 +295,7 @@ const App: React.FC = () => {
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, role: [Role.ADMIN, Role.MANAGER] },
     { id: 'tickets', label: 'Service Tickets', icon: TicketIcon, role: [Role.ADMIN, Role.MANAGER, Role.TECHNICIAN] },
     { id: 'sales', label: 'Sales Pipeline', icon: Users, role: [Role.ADMIN, Role.MANAGER] },
+    { id: 'reports', label: 'Reports', icon: BarChart3, role: [Role.ADMIN, Role.MANAGER] },
     { id: 'customers', label: 'Customer Master', icon: Database, role: [Role.ADMIN, Role.MANAGER] },
     { id: 'parts', label: 'Parts Master', icon: Package, role: [Role.ADMIN, Role.MANAGER] },
     { id: 'machines', label: 'Machine Master', icon: Monitor, role: [Role.ADMIN, Role.MANAGER] },
@@ -275,12 +374,24 @@ const App: React.FC = () => {
                 </div>
             )}
 
-          {activeTab === 'dashboard' && <Dashboard tickets={tickets} />}
-          {activeTab === 'tickets' && <TicketBoard tickets={tickets} technicians={technicians} customers={customers} onAssign={handleAssignTicket} onCreateTicket={handleCreateTicket} onAddCustomer={handleAddCustomer} />}
-          {activeTab === 'technician' && <TechnicianView tickets={tickets} parts={parts} onUpdateTicket={handleUpdateTicket} currentUserId={currentUser!.id} />}
-          {activeTab === 'sales' && <SalesFlow leads={leads} onAddLead={handleAddLead} onUpdateStatus={handleUpdateLeadStatus} />}
-          {activeTab === 'customers' && <CustomerMaster customers={customers} tickets={tickets} machineTypes={machineTypes} onAddCustomer={handleAddCustomer} onAddMachine={handleAddMachine} onCreateTicket={handleCreateTicket} />}
-          {activeTab === 'parts' && <PartsMaster parts={parts} onAddPart={handleAddPart} />}
+          {activeTab === 'dashboard' && <Dashboard tickets={tickets} amcExpiries={amcExpiries} onCreateTicket={handleCreateTicket} />}
+          {activeTab === 'tickets' && <TicketBoard tickets={tickets} technicians={technicians} customers={customers} onAssign={handleAssignTicket} onCreateTicket={handleCreateTicket} onAddCustomer={handleAddCustomer} onCancelTicket={handleCancelTicket} />}
+          {activeTab === 'technician' && <TechnicianView tickets={tickets} parts={parts} onUpdateTicket={handleUpdateTicket} onCancelTicket={handleCancelTicket} currentUserId={currentUser!.id} />}
+          {activeTab === 'sales' && <SalesFlow leads={leads} onAddLead={handleAddLead} onUpdateLead={handleUpdateLead} onDeleteLead={handleDeleteLead} onConvertLead={handleConvertLead} />}
+          {activeTab === 'reports' && <Reports tickets={tickets} />}
+          {activeTab === 'customers' && (
+            <CustomerMaster 
+                customers={customers} 
+                tickets={tickets} 
+                machineTypes={machineTypes}
+                onAddCustomer={handleAddCustomer}
+                onAddMachine={handleAddMachine}
+                onUpdateMachine={handleUpdateMachine}
+                onDeleteMachine={handleDeleteMachine}
+                onCreateTicket={handleCreateTicket}
+            />
+          )}
+          {activeTab === 'parts' && <PartsMaster parts={parts} onAddPart={handleAddPart} onUpdatePart={handleUpdatePart} />}
           {activeTab === 'machines' && <MachineMaster machineTypes={machineTypes} onAddMachineType={handleAddMachineType} />}
           {activeTab === 'users' && <UserManagement users={users} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser} onDeleteUser={handleDeleteUser} />}
         </div>

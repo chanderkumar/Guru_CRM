@@ -9,11 +9,11 @@ export const USERS: User[] = [
 ];
 
 export const MOCK_PARTS: Part[] = [
-  { id: 'p1', name: 'RO Membrane 100GPD', category: 'Filters', price: 1200, warrantyMonths: 12 },
-  { id: 'p2', name: 'Sediment Filter', category: 'Filters', price: 350, warrantyMonths: 0 },
-  { id: 'p3', name: 'Carbon Filter', category: 'Filters', price: 400, warrantyMonths: 0 },
-  { id: 'p4', name: 'Booster Pump', category: 'Motors', price: 2500, warrantyMonths: 12 },
-  { id: 'p5', name: 'UV Lamp', category: 'Electronics', price: 800, warrantyMonths: 6 },
+  { id: 'p1', name: 'RO Membrane 100GPD', category: 'Filters', price: 1200, warrantyMonths: 12, stockQuantity: 10 },
+  { id: 'p2', name: 'Sediment Filter', category: 'Filters', price: 350, warrantyMonths: 0, stockQuantity: 25 },
+  { id: 'p3', name: 'Carbon Filter', category: 'Filters', price: 400, warrantyMonths: 0, stockQuantity: 20 },
+  { id: 'p4', name: 'Booster Pump', category: 'Motors', price: 2500, warrantyMonths: 12, stockQuantity: 5 },
+  { id: 'p5', name: 'UV Lamp', category: 'Electronics', price: 800, warrantyMonths: 6, stockQuantity: 8 },
 ];
 
 export const MOCK_CUSTOMERS: Customer[] = [

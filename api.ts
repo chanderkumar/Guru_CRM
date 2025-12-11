@@ -1,5 +1,5 @@
 
-import { Ticket, Customer, Lead, Part, Machine, LeadStatus, AssignmentHistory, MachineType, User } from './types';
+import { Ticket, Customer, Lead, Part, Machine, LeadStatus, AssignmentHistory, MachineType, User, AmcExpiry, LeadHistory } from './types';
 import { MOCK_TICKETS, MOCK_CUSTOMERS, MOCK_LEADS, MOCK_PARTS } from './constants';
 
 const API_URL = 'http://localhost:3001/api';
@@ -13,7 +13,7 @@ const safeFetch = async (url: string, options?: RequestInit) => {
     }
     return await res.json();
   } catch (err) {
-    if (url.includes('login')) throw err; // Don't mock login failures, throw real error
+    if (url.includes('login')) throw err; // Don't mock login failures
     console.warn(`Server unreachable (${url}). Using Mock Data fallback.`, err);
     throw err;
   }
@@ -40,10 +40,11 @@ export const api = {
         parts: data.parts as Part[],
         machineTypes: (data.machineTypes || []) as MachineType[],
         users: (data.users || []) as User[],
+        amcExpiries: (data.amcExpiries || []) as AmcExpiry[],
         isOffline: false
       };
     } catch (error) {
-      // Fallback to Mock Data if server is offline
+      // Fallback to Mock Data
       return {
         tickets: MOCK_TICKETS,
         customers: MOCK_CUSTOMERS,
@@ -51,6 +52,7 @@ export const api = {
         parts: MOCK_PARTS,
         machineTypes: [],
         users: [],
+        amcExpiries: [],
         isOffline: true
       };
     }
@@ -99,6 +101,20 @@ export const api = {
     });
   },
 
+  updateMachine: async (machineId: string | number, machine: Machine) => {
+      return await safeFetch(`${API_URL}/machines/${machineId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(machine),
+      });
+  },
+
+  deleteMachine: async (machineId: string | number) => {
+      return await safeFetch(`${API_URL}/machines/${machineId}`, {
+          method: 'DELETE',
+      });
+  },
+
   // --- Leads ---
   createLead: async (lead: Lead) => {
     return await safeFetch(`${API_URL}/leads`, {
@@ -108,12 +124,24 @@ export const api = {
     });
   },
 
-  updateLeadStatus: async (id: string, status: LeadStatus, extraData: Partial<Lead> = {}) => {
+  updateLead: async (id: string, updates: Partial<Lead>) => {
     return await safeFetch(`${API_URL}/leads/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status, ...extraData }),
+      body: JSON.stringify(updates),
     });
+  },
+
+  deleteLead: async (id: string) => {
+      return await safeFetch(`${API_URL}/leads/${id}`, { method: 'DELETE' });
+  },
+
+  getLeadHistory: async (id: string): Promise<LeadHistory[]> => {
+      return await safeFetch(`${API_URL}/leads/${id}/history`);
+  },
+
+  convertLeadToCustomer: async (id: string) => {
+      return await safeFetch(`${API_URL}/leads/${id}/convert`, { method: 'POST' });
   },
 
   // --- Parts ---
@@ -124,8 +152,16 @@ export const api = {
       body: JSON.stringify(part),
     });
   },
+  
+  updatePart: async (part: Part) => {
+    return await safeFetch(`${API_URL}/parts/${part.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(part),
+    });
+  },
 
-  // --- Machine Types (Master) ---
+  // --- Machine Types ---
   createMachineType: async (machineType: MachineType) => {
     return await safeFetch(`${API_URL}/machine-types`, {
       method: 'POST',

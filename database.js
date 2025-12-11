@@ -50,19 +50,33 @@ export async function initDb() {
       totalAmount REAL,
       paymentMode TEXT,
       technicianNotes TEXT,
-      nextFollowUp TEXT
+      nextFollowUp TEXT,
+      cancellationReason TEXT
     );
 
     CREATE TABLE IF NOT EXISTS leads (
       id TEXT PRIMARY KEY,
       name TEXT,
       phone TEXT,
+      email TEXT,
+      address TEXT,
       source TEXT,
       status TEXT,
       notes TEXT,
       createdAt TEXT,
       nextFollowUp TEXT,
-      estimateValue REAL
+      estimateValue REAL,
+      assignedTo TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS lead_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      leadId TEXT,
+      action TEXT,
+      details TEXT,
+      timestamp TEXT,
+      performedBy TEXT,
+      FOREIGN KEY(leadId) REFERENCES leads(id)
     );
 
     CREATE TABLE IF NOT EXISTS parts (
@@ -70,7 +84,8 @@ export async function initDb() {
       name TEXT,
       category TEXT,
       price REAL,
-      warrantyMonths INTEGER
+      warrantyMonths INTEGER,
+      stockQuantity INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS machine_types (
@@ -90,20 +105,6 @@ export async function initDb() {
       FOREIGN KEY(ticketId) REFERENCES tickets(id)
     );
 
-    -- Dropping old users table if it exists without email column to ensure migration
-    -- In a production environment, you would use ALTER TABLE
-    -- CREATE TABLE IF NOT EXISTS users ( ... );
-  `);
-
-  // Check if users table has the new schema, if not drop and recreate (Simple migration for dev)
-  try {
-      await db.get('SELECT email FROM users LIMIT 1');
-  } catch (e) {
-      // Column email likely doesn't exist, drop and recreate
-      await db.exec('DROP TABLE IF EXISTS users');
-  }
-
-  await db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       name TEXT,
@@ -115,13 +116,19 @@ export async function initDb() {
       status TEXT DEFAULT 'Active'
     );
   `);
+
+  // Migrations checks (Manual execution if needed for existing DBs, but prefer delete DB for this update)
+  try { await db.get('SELECT email FROM leads LIMIT 1'); } 
+  catch (e) { await db.exec('ALTER TABLE leads ADD COLUMN email TEXT'); }
   
+  try { await db.get('SELECT address FROM leads LIMIT 1'); } 
+  catch (e) { await db.exec('ALTER TABLE leads ADD COLUMN address TEXT'); }
+
   // Seed Default Admin User if empty
   const userCount = await db.get('SELECT count(*) as count FROM users');
   if (userCount.count === 0) {
       console.log("Seeding default admin user...");
       const stmt = await db.prepare('INSERT INTO users (id, name, email, password, role, phone, address, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-      // Default Password: admin123
       await stmt.run('u1', 'Super Admin', 'admin@guru.com', 'admin123', 'Admin', '9999999999', 'Head Office', 'Active');
       await stmt.finalize();
   }

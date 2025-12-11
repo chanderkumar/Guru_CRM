@@ -1,8 +1,9 @@
 
 import React, { useState } from 'react';
 import { Customer, Ticket, TicketPriority, TicketStatus, User, CustomerType, AssignmentHistory } from '../types';
-import { Calendar, User as UserIcon, AlertCircle, Plus, Building, Search, X, Edit2, History as HistoryIcon, Clock } from 'lucide-react';
+import { Calendar, User as UserIcon, AlertCircle, Plus, Building, Search, X, Edit2, History as HistoryIcon, Clock, FileText, Trash2, Ban } from 'lucide-react';
 import { api } from '../api';
+import { InvoiceView } from './InvoiceView';
 
 interface TicketBoardProps {
   tickets: Ticket[];
@@ -11,9 +12,10 @@ interface TicketBoardProps {
   onAssign: (ticketId: string, techId: string, scheduledDate: string) => void;
   onCreateTicket: (ticket: Partial<Ticket>) => void;
   onAddCustomer: (customer: Customer) => void;
+  onCancelTicket: (ticketId: string, reason: string) => void;
 }
 
-export const TicketBoard: React.FC<TicketBoardProps> = ({ tickets, technicians, customers, onAssign, onCreateTicket, onAddCustomer }) => {
+export const TicketBoard: React.FC<TicketBoardProps> = ({ tickets, technicians, customers, onAssign, onCreateTicket, onAddCustomer, onCancelTicket }) => {
   const [filter, setFilter] = useState<TicketStatus | 'All'>('All');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isQuickAddCustomerOpen, setQuickAddCustomerOpen] = useState(false);
@@ -31,6 +33,14 @@ export const TicketBoard: React.FC<TicketBoardProps> = ({ tickets, technicians, 
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [currentTicketHistory, setCurrentTicketHistory] = useState<AssignmentHistory[]>([]);
   const [currentTicketIdForHistory, setCurrentTicketIdForHistory] = useState<string | null>(null);
+
+  // Cancellation Modal State
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [ticketToCancel, setTicketToCancel] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+
+  // Invoice State
+  const [invoiceTicket, setInvoiceTicket] = useState<Ticket | null>(null);
 
   const [newTicket, setNewTicket] = useState<{
     customerId: string;
@@ -110,6 +120,21 @@ export const TicketBoard: React.FC<TicketBoardProps> = ({ tickets, technicians, 
       const history = await api.getTicketHistory(ticketId);
       setCurrentTicketHistory(history);
   };
+  
+  const initiateCancel = (ticketId: string) => {
+      setTicketToCancel(ticketId);
+      setCancelReason('');
+      setCancelModalOpen(true);
+  }
+
+  const confirmCancel = () => {
+      if (ticketToCancel && cancelReason) {
+          onCancelTicket(ticketToCancel, cancelReason);
+          setCancelModalOpen(false);
+          setTicketToCancel(null);
+          setCancelReason('');
+      }
+  }
 
   const formatDisplayDate = (dateStr: string) => {
     if (!dateStr) return 'Not Scheduled';
@@ -154,7 +179,18 @@ export const TicketBoard: React.FC<TicketBoardProps> = ({ tickets, technicians, 
           <div key={ticket.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 space-y-4">
             {/* -- Top Section: Customer Info & Description -- */}
             <div>
-              <h3 className="font-semibold text-lg text-gray-800">{ticket.customerName}</h3>
+              <div className="flex justify-between items-start">
+                  <h3 className="font-semibold text-lg text-gray-800">{ticket.customerName}</h3>
+                  {(ticket.status === TicketStatus.PENDING || ticket.status === TicketStatus.ASSIGNED) && (
+                      <button 
+                        onClick={() => initiateCancel(ticket.id)}
+                        className="text-gray-400 hover:text-red-600 p-1"
+                        title="Cancel Ticket"
+                      >
+                          <Trash2 size={16} />
+                      </button>
+                  )}
+              </div>
               <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-xs text-gray-500 mt-1">
                 <span className="font-mono">#{ticket.id}</span>
                 <span className="font-medium text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{ticket.type}</span>
@@ -175,11 +211,16 @@ export const TicketBoard: React.FC<TicketBoardProps> = ({ tickets, technicians, 
                 </button>
               </div>
               <p className="text-gray-600 text-sm mt-2">{ticket.description}</p>
+              {ticket.status === TicketStatus.CANCELLED && ticket.cancellationReason && (
+                  <div className="mt-2 text-xs text-red-600 bg-red-50 p-2 rounded flex items-start gap-1">
+                      <Ban size={14} className="mt-0.5 shrink-0" />
+                      <span><strong>Cancelled:</strong> {ticket.cancellationReason}</span>
+                  </div>
+              )}
             </div>
             
-            {/* -- Bottom Section: Status & Actions (Responsive Redesign) -- */}
+            {/* -- Bottom Section: Status & Actions -- */}
             <div className="border-t border-gray-100 pt-4 flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4">
-              {/* Left Side: Date and Status */}
               <div className="flex items-center justify-between sm:justify-start sm:items-end gap-4">
                 <div className="text-sm">
                   <p className="text-gray-500">Scheduled</p>
@@ -189,13 +230,13 @@ export const TicketBoard: React.FC<TicketBoardProps> = ({ tickets, technicians, 
                   ticket.status === TicketStatus.COMPLETED ? 'bg-green-100 text-green-700' : 
                   ticket.status === TicketStatus.ASSIGNED ? 'bg-yellow-100 text-yellow-700' :
                   ticket.status === TicketStatus.IN_PROGRESS ? 'bg-blue-100 text-blue-700' :
+                  ticket.status === TicketStatus.CANCELLED ? 'bg-red-100 text-red-700' :
                   'text-orange-500 bg-orange-100'
                 }`}>
                   {ticket.status}
                 </span>
               </div>
               
-              {/* Right Side: Technician Assignment */}
               <div className="w-full sm:w-auto sm:max-w-[220px]">
                 {ticket.status === TicketStatus.PENDING ? (
                   <div className="flex flex-col gap-1">
@@ -211,13 +252,19 @@ export const TicketBoard: React.FC<TicketBoardProps> = ({ tickets, technicians, 
                       ))}
                     </select>
                   </div>
+                ) : ticket.status === TicketStatus.COMPLETED ? (
+                    <button 
+                        onClick={() => setInvoiceTicket(ticket)}
+                        className="w-full sm:w-auto px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium flex items-center justify-center gap-2"
+                    >
+                        <FileText size={16} /> Print Invoice
+                    </button>
                 ) : ticket.assignedTechnicianId ? (
                   <div className="text-sm text-right sm:text-left">
                     <p className="text-gray-500">Assigned To</p>
                     <div className="flex items-center justify-end sm:justify-start gap-2 font-medium text-green-700">
                       <UserIcon size={14} />
                       {technicians.find(t => t.id === ticket.assignedTechnicianId)?.name || 'Unknown'}
-                      {/* Reschedule Button */}
                       {(ticket.status === TicketStatus.ASSIGNED) && (
                           <button 
                             onClick={() => handleTechSelect(ticket, ticket.assignedTechnicianId!)} 
@@ -429,6 +476,51 @@ export const TicketBoard: React.FC<TicketBoardProps> = ({ tickets, technicians, 
                 </form>
             </div>
          </div>
+       )}
+
+       {/* Cancel Reason Modal */}
+       {cancelModalOpen && (
+           <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-fade-in">
+               <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+                   <h3 className="text-lg font-bold mb-2 text-red-600 flex items-center gap-2">
+                       <Ban size={20} /> Cancel Ticket
+                   </h3>
+                   <p className="text-sm text-gray-600 mb-4">
+                       Please provide a reason for cancelling this ticket.
+                   </p>
+                   <textarea 
+                       className="w-full border rounded-lg p-3 text-sm focus:ring-2 focus:ring-red-500 outline-none"
+                       rows={3}
+                       placeholder="Enter reason..."
+                       value={cancelReason}
+                       onChange={e => setCancelReason(e.target.value)}
+                   ></textarea>
+                   <div className="flex gap-3 mt-4">
+                       <button 
+                           onClick={() => setCancelModalOpen(false)}
+                           className="flex-1 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium"
+                       >
+                           Close
+                       </button>
+                       <button 
+                           onClick={confirmCancel}
+                           disabled={!cancelReason.trim()}
+                           className="flex-1 py-2 text-white bg-red-600 hover:bg-red-700 rounded-lg font-medium disabled:opacity-50"
+                       >
+                           Confirm Cancel
+                       </button>
+                   </div>
+               </div>
+           </div>
+       )}
+
+       {/* Invoice Modal */}
+       {invoiceTicket && (
+           <InvoiceView 
+                ticket={invoiceTicket} 
+                customer={customers.find(c => c.id === invoiceTicket.customerId)!}
+                onClose={() => setInvoiceTicket(null)}
+           />
        )}
     </div>
   );

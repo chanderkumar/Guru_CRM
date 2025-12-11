@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Customer, CustomerType, Machine, Ticket, TicketPriority, TicketStatus, MachineType } from '../types';
-import { Search, MapPin, Shield, Plus, Ticket as TicketIcon, Calendar, CheckCircle, X, Monitor, AlertCircle } from 'lucide-react';
+import { Search, MapPin, Shield, Plus, Ticket as TicketIcon, Calendar, CheckCircle, X, Monitor, AlertCircle, PenTool, Trash2 } from 'lucide-react';
 
 interface CustomerMasterProps {
   customers: Customer[];
@@ -9,10 +9,12 @@ interface CustomerMasterProps {
   machineTypes: MachineType[];
   onAddCustomer: (customer: Customer) => void;
   onAddMachine: (customerId: string, machine: Machine) => void;
+  onUpdateMachine: (customerId: string, machineId: string | number, machine: Machine) => void;
+  onDeleteMachine: (customerId: string, machineId: string | number) => void;
   onCreateTicket: (ticket: Partial<Ticket>) => void;
 }
 
-export const CustomerMaster: React.FC<CustomerMasterProps> = ({ customers, tickets, machineTypes, onAddCustomer, onAddMachine, onCreateTicket }) => {
+export const CustomerMaster: React.FC<CustomerMasterProps> = ({ customers, tickets, machineTypes, onAddCustomer, onAddMachine, onUpdateMachine, onDeleteMachine, onCreateTicket }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'All' | CustomerType>('All');
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -21,6 +23,7 @@ export const CustomerMaster: React.FC<CustomerMasterProps> = ({ customers, ticke
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
   const [isAddMachineOpen, setIsAddMachineOpen] = useState(false);
   const [selectedCustomerIdForMachine, setSelectedCustomerIdForMachine] = useState<string | null>(null);
+  const [editingMachineId, setEditingMachineId] = useState<string | number | null>(null);
 
   // New Customer State
   const [newCustomer, setNewCustomer] = useState<{
@@ -82,6 +85,7 @@ export const CustomerMaster: React.FC<CustomerMasterProps> = ({ customers, ticke
   // --- Machine Logic ---
   const openAddMachineModal = (customerId: string) => {
       setSelectedCustomerIdForMachine(customerId);
+      setEditingMachineId(null); // Reset editing mode
       const today = new Date().toISOString().split('T')[0];
       
       // Default to 1 year from today
@@ -97,6 +101,25 @@ export const CustomerMaster: React.FC<CustomerMasterProps> = ({ customers, ticke
           amcExpiry: nextYearStr
       });
       setIsAddMachineOpen(true);
+  };
+
+  const openEditMachineModal = (customerId: string, machine: Machine) => {
+      setSelectedCustomerIdForMachine(customerId);
+      setEditingMachineId(machine.id!); 
+      setNewMachineData({
+          modelNo: machine.modelNo,
+          installationDate: machine.installationDate,
+          warrantyExpiry: machine.warrantyExpiry,
+          amcActive: machine.amcActive,
+          amcExpiry: machine.amcExpiry || ''
+      });
+      setIsAddMachineOpen(true);
+  };
+
+  const handleDeleteMachine = (customerId: string, machineId: string | number) => {
+      if (confirm('Are you sure you want to delete this machine? This cannot be undone.')) {
+          onDeleteMachine(customerId, machineId);
+      }
   };
 
   const handleMachineTypeSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -123,7 +146,7 @@ export const CustomerMaster: React.FC<CustomerMasterProps> = ({ customers, ticke
       e.preventDefault();
       if (!selectedCustomerIdForMachine) return;
       
-      const newMachine: Machine = {
+      const machineData: Machine = {
         modelNo: newMachineData.modelNo || 'Unknown Model',
         installationDate: newMachineData.installationDate,
         warrantyExpiry: newMachineData.warrantyExpiry,
@@ -131,7 +154,11 @@ export const CustomerMaster: React.FC<CustomerMasterProps> = ({ customers, ticke
         amcExpiry: newMachineData.amcActive ? newMachineData.amcExpiry : undefined,
       };
       
-      onAddMachine(selectedCustomerIdForMachine, newMachine);
+      if (editingMachineId) {
+          onUpdateMachine(selectedCustomerIdForMachine, editingMachineId, machineData);
+      } else {
+          onAddMachine(selectedCustomerIdForMachine, machineData);
+      }
       setIsAddMachineOpen(false);
   };
 
@@ -265,69 +292,78 @@ export const CustomerMaster: React.FC<CustomerMasterProps> = ({ customers, ticke
                       <p className="text-sm text-gray-500 italic">No machines registered.</p>
                   ) : (
                     customer.machines.map((machine, idx) => (
-                        <div key={idx} className="bg-white p-3 rounded border border-gray-200 flex flex-col lg:flex-row justify-between lg:items-center gap-4">
-                        <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-3 gap-x-4">
-                            <div className="min-w-[120px]">
-                            <p className="text-xs text-gray-500">Model</p>
-                            <p className="font-medium text-slate-800">{machine.modelNo}</p>
+                        <div key={idx} className="bg-white p-3 rounded border border-gray-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                            <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+                                <div>
+                                    <span className="block text-xs text-gray-400">Model</span>
+                                    <span className="font-medium text-gray-800">{machine.modelNo}</span>
+                                </div>
+                                <div>
+                                    <span className="block text-xs text-gray-400">Warranty Ends</span>
+                                    <span className="font-medium text-gray-800">{machine.warrantyExpiry}</span>
+                                </div>
+                                <div>
+                                    <span className="block text-xs text-gray-400">AMC Status</span>
+                                    {machine.amcActive ? (
+                                        <span className="text-green-600 font-bold text-xs flex items-center gap-1">
+                                            <Shield size={12}/> Active (Exp: {machine.amcExpiry})
+                                        </span>
+                                    ) : (
+                                        <span className="text-gray-400 text-xs">No AMC</span>
+                                    )}
+                                </div>
                             </div>
-                            <div>
-                            <p className="text-xs text-gray-500">Installation Date</p>
-                            <p className="text-sm">{machine.installationDate}</p>
+                            <div className="flex gap-2">
+                                <button 
+                                    onClick={() => openEditMachineModal(customer.id, machine)}
+                                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                                    title="Edit Machine"
+                                >
+                                    <PenTool size={14} />
+                                </button>
+                                <button 
+                                    onClick={() => handleDeleteMachine(customer.id, machine.id!)}
+                                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                                    title="Delete Machine"
+                                >
+                                    <Trash2 size={14} />
+                                </button>
                             </div>
-                            <div>
-                            <p className="text-xs text-gray-500">Warranty Expiry</p>
-                            <p className={`text-sm font-medium ${new Date(machine.warrantyExpiry) < new Date() ? 'text-red-600' : 'text-green-600'}`}>
-                                {machine.warrantyExpiry}
-                            </p>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            {machine.amcActive ? (
-                            <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded flex items-center gap-1">
-                                <Shield size={12}/> AMC Active
-                            </span>
-                            ) : (
-                            <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded">No AMC</span>
-                            )}
-                        </div>
                         </div>
                     ))
                   )}
                 </div>
 
                 {/* --- Service History Section --- */}
-                <div className="flex justify-between items-center mb-3 border-t border-gray-200 pt-4">
+                <div className="flex justify-between items-center mb-3">
                     <h4 className="text-sm font-bold text-gray-600 uppercase tracking-wide">Service History</h4>
                     <button 
                         onClick={() => openTicketModal(customer)}
-                        className="text-xs bg-blue-600 text-white hover:bg-blue-700 px-3 py-1.5 rounded flex items-center gap-1 shadow-sm"
+                        className="text-xs bg-blue-600 text-white hover:bg-blue-700 px-3 py-1.5 rounded flex items-center gap-1 transition"
                     >
                         <TicketIcon size={12}/> Raise Ticket
                     </button>
                 </div>
-                
+
                 <div className="space-y-2">
                     {getCustomerTickets(customer.id).length === 0 ? (
-                        <p className="text-sm text-gray-500 italic">No service history found.</p>
+                         <p className="text-sm text-gray-500 italic">No service history found.</p>
                     ) : (
                         getCustomerTickets(customer.id).map(ticket => (
-                            <div key={ticket.id} className="bg-white p-3 rounded border border-gray-200 flex flex-col sm:flex-row justify-between gap-2">
+                            <div key={ticket.id} className="bg-white p-3 rounded border border-gray-100 flex justify-between items-center hover:bg-gray-50">
                                 <div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 mb-1">
                                         <span className="text-xs font-mono text-gray-400">#{ticket.id}</span>
-                                        <span className="font-medium text-sm text-gray-800">{ticket.type}</span>
-                                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                                            ticket.status === TicketStatus.COMPLETED ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                                        <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                            ticket.status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
                                         }`}>{ticket.status}</span>
+                                        <span className="text-xs font-medium text-gray-700">{ticket.type}</span>
                                     </div>
-                                    <p className="text-xs text-gray-500 mt-1">{ticket.description}</p>
+                                    <p className="text-sm text-gray-600 truncate max-w-xs">{ticket.description}</p>
                                 </div>
-                                <div className="text-right text-xs text-gray-500 flex flex-col sm:items-end">
-                                    <span className="flex items-center gap-1"><Calendar size={12}/> {ticket.scheduledDate}</span>
-                                    {ticket.completedDate && (
-                                        <span className="text-green-600 flex items-center gap-1"><CheckCircle size={12}/> Done: {ticket.completedDate}</span>
-                                    )}
+                                <div className="text-right text-xs text-gray-500">
+                                    <p>{ticket.scheduledDate}</p>
+                                    {ticket.assignedTechnicianId && <p className="text-blue-600">Tech Assigned</p>}
                                 </div>
                             </div>
                         ))
@@ -338,14 +374,17 @@ export const CustomerMaster: React.FC<CustomerMasterProps> = ({ customers, ticke
             )}
           </div>
         ))}
-
+        
         {filteredCustomers.length === 0 && (
-          <div className="text-center py-10 text-gray-500">
-            No customers found matching your search.
+          <div className="text-center py-12 bg-white rounded-xl shadow-sm border border-gray-100">
+            <AlertCircle className="mx-auto text-gray-300 mb-2" size={32} />
+            <p className="text-gray-500">No customers found matching your search.</p>
           </div>
         )}
       </div>
 
+      {/* --- Modals --- */}
+      
       {/* Add Customer Modal */}
       {isAddCustomerOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-fade-in">
@@ -358,17 +397,17 @@ export const CustomerMaster: React.FC<CustomerMasterProps> = ({ customers, ticke
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Phone Number</label>
-                <input required type="tel" className="w-full border rounded p-2 mt-1" value={newCustomer.phone} onChange={e => setNewCustomer({...newCustomer, phone: e.target.value})} />
+                <input required type="text" className="w-full border rounded p-2 mt-1" value={newCustomer.phone} onChange={e => setNewCustomer({...newCustomer, phone: e.target.value})} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Address</label>
-                <textarea required className="w-full border rounded p-2 mt-1" rows={2} value={newCustomer.address} onChange={e => setNewCustomer({...newCustomer, address: e.target.value})} />
+                <textarea required className="w-full border rounded p-2 mt-1" rows={2} value={newCustomer.address} onChange={e => setNewCustomer({...newCustomer, address: e.target.value})}></textarea>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Customer Type</label>
+                <label className="block text-sm font-medium text-gray-700">Type</label>
                 <select className="w-full border rounded p-2 mt-1" value={newCustomer.type} onChange={e => setNewCustomer({...newCustomer, type: e.target.value as CustomerType})}>
-                  <option value={CustomerType.GURU_INSTALLED}>Guru Installed</option>
-                  <option value={CustomerType.SERVICE_ONLY}>Service Only</option>
+                  <option value={CustomerType.GURU_INSTALLED}>{CustomerType.GURU_INSTALLED}</option>
+                  <option value={CustomerType.SERVICE_ONLY}>{CustomerType.SERVICE_ONLY}</option>
                 </select>
               </div>
               <div className="flex justify-end gap-2 mt-6">
@@ -380,119 +419,104 @@ export const CustomerMaster: React.FC<CustomerMasterProps> = ({ customers, ticke
         </div>
       )}
 
-      {/* Add Machine Modal */}
+      {/* Add/Edit Machine Modal */}
       {isAddMachineOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-            <h3 className="text-xl font-bold mb-4">Add Machine</h3>
-            <form onSubmit={handleAddMachineSubmit} className="space-y-4">
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Machine Model</label>
-                <select 
-                    required 
-                    className="w-full border rounded p-2 mt-1 bg-white"
-                    value={newMachineData.modelNo}
-                    onChange={handleMachineTypeSelect}
-                >
-                    <option value="">-- Select from Catalog --</option>
-                    {machineTypes.map(m => (
-                        <option key={m.id} value={m.modelName}>{m.modelName} (Warranty: {m.warrantyMonths}m)</option>
-                    ))}
-                    <option value="Other">Other / Manual Entry</option>
-                </select>
-                {newMachineData.modelNo === 'Other' && (
-                    <input 
-                        type="text" 
-                        placeholder="Enter Model Name"
-                        className="w-full border rounded p-2 mt-2" 
-                        onChange={(e) => setNewMachineData({...newMachineData, modelNo: e.target.value})}
-                    />
-                )}
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-fade-in">
+              <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+                  <h3 className="text-xl font-bold mb-4">{editingMachineId ? 'Edit Machine Details' : 'Add New Machine'}</h3>
+                  <form onSubmit={handleAddMachineSubmit} className="space-y-4">
+                      <div>
+                          <label className="block text-sm font-medium text-gray-700">Machine Model</label>
+                          <select 
+                            required 
+                            className="w-full border rounded p-2 mt-1"
+                            value={newMachineData.modelNo}
+                            onChange={handleMachineTypeSelect}
+                          >
+                            <option value="">Select Model</option>
+                            {machineTypes.map(m => <option key={m.id} value={m.modelName}>{m.modelName}</option>)}
+                            <option value="Other">Other / Custom</option>
+                          </select>
+                          {newMachineData.modelNo === 'Other' && (
+                             <input 
+                                type="text" 
+                                className="w-full border rounded p-2 mt-2" 
+                                placeholder="Enter Model Name"
+                                onChange={e => setNewMachineData({...newMachineData, modelNo: e.target.value})}
+                             />
+                          )}
+                      </div>
+                      <div>
+                          <label className="block text-sm font-medium text-gray-700">Installation Date</label>
+                          <input type="date" required className="w-full border rounded p-2 mt-1" value={newMachineData.installationDate} onChange={e => setNewMachineData({...newMachineData, installationDate: e.target.value})} />
+                      </div>
+                      <div>
+                          <label className="block text-sm font-medium text-gray-700">Warranty Expiry</label>
+                          <input type="date" required className="w-full border rounded p-2 mt-1" value={newMachineData.warrantyExpiry} onChange={e => setNewMachineData({...newMachineData, warrantyExpiry: e.target.value})} />
+                      </div>
+                      <div className="flex items-center gap-2 mt-2">
+                          <input type="checkbox" id="amcActive" checked={newMachineData.amcActive} onChange={e => setNewMachineData({...newMachineData, amcActive: e.target.checked})} />
+                          <label htmlFor="amcActive" className="text-sm font-medium text-gray-700">Under AMC?</label>
+                      </div>
+                      {newMachineData.amcActive && (
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700">AMC Expiry Date</label>
+                              <input type="date" required className="w-full border rounded p-2 mt-1" value={newMachineData.amcExpiry} onChange={e => setNewMachineData({...newMachineData, amcExpiry: e.target.value})} />
+                          </div>
+                      )}
+                      <div className="flex justify-end gap-2 mt-6">
+                          <button type="button" onClick={() => setIsAddMachineOpen(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded">Cancel</button>
+                          <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                              {editingMachineId ? 'Update Machine' : 'Add Machine'}
+                          </button>
+                      </div>
+                  </form>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Installation Date</label>
-                <input required type="date" className="w-full border rounded p-2 mt-1" value={newMachineData.installationDate} onChange={e => setNewMachineData({...newMachineData, installationDate: e.target.value})} />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Warranty Expiry</label>
-                <input required type="date" className="w-full border rounded p-2 mt-1" value={newMachineData.warrantyExpiry} onChange={e => setNewMachineData({...newMachineData, warrantyExpiry: e.target.value})} />
-              </div>
-
-              <div className="flex items-center gap-2 mt-2">
-                <input type="checkbox" id="amcActive" checked={newMachineData.amcActive} onChange={e => setNewMachineData({...newMachineData, amcActive: e.target.checked})} className="w-4 h-4 text-blue-600 rounded" />
-                <label htmlFor="amcActive" className="text-sm font-medium text-gray-700">AMC Active?</label>
-              </div>
-              
-              {newMachineData.amcActive && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">AMC Expiry</label>
-                  <input required type="date" className="w-full border rounded p-2 mt-1" value={newMachineData.amcExpiry} onChange={e => setNewMachineData({...newMachineData, amcExpiry: e.target.value})} />
-                </div>
-              )}
-
-              <div className="flex justify-end gap-2 mt-6">
-                <button type="button" onClick={() => setIsAddMachineOpen(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Add Machine</button>
-              </div>
-            </form>
           </div>
-        </div>
       )}
 
-      {/* Create Ticket Modal (From Customer View) */}
-      {ticketModalOpen && selectedCustomerForTicket && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-            <h3 className="text-xl font-bold mb-4">Raise Ticket for {selectedCustomerForTicket.name}</h3>
-            <form onSubmit={handleTicketSubmit} className="space-y-4">
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Select Machine</label>
-                <select 
-                    className="w-full border rounded p-2 mt-1"
-                    value={newTicketData.machineModelNo}
-                    onChange={e => setNewTicketData({...newTicketData, machineModelNo: e.target.value})}
-                >
-                    {selectedCustomerForTicket.machines.length === 0 && <option value="">No machines found</option>}
-                    {selectedCustomerForTicket.machines.map(m => (
-                        <option key={m.modelNo} value={m.modelNo}>{m.modelNo}</option>
-                    ))}
-                </select>
+      {/* Create Ticket Modal (From Customer Page) */}
+      {ticketModalOpen && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-fade-in">
+              <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+                  <h3 className="text-xl font-bold mb-4">Raise Ticket: {selectedCustomerForTicket?.name}</h3>
+                  <form onSubmit={handleTicketSubmit} className="space-y-4">
+                      <div>
+                          <label className="block text-sm font-medium text-gray-700">Machine</label>
+                          <select className="w-full border rounded p-2 mt-1" value={newTicketData.machineModelNo} onChange={e => setNewTicketData({...newTicketData, machineModelNo: e.target.value})}>
+                             {selectedCustomerForTicket?.machines.map(m => (
+                                 <option key={m.modelNo} value={m.modelNo}>{m.modelNo}</option>
+                             ))}
+                             <option value="">General / Other</option>
+                          </select>
+                      </div>
+                      <div>
+                          <label className="block text-sm font-medium text-gray-700">Service Type</label>
+                          <select className="w-full border rounded p-2 mt-1" value={newTicketData.type} onChange={e => setNewTicketData({...newTicketData, type: e.target.value})}>
+                              <option>Repair</option>
+                              <option>AMC Service</option>
+                              <option>Installation</option>
+                          </select>
+                      </div>
+                      <div>
+                          <label className="block text-sm font-medium text-gray-700">Priority</label>
+                          <select className="w-full border rounded p-2 mt-1" value={newTicketData.priority} onChange={e => setNewTicketData({...newTicketData, priority: e.target.value as TicketPriority})}>
+                              <option value={TicketPriority.MEDIUM}>Medium</option>
+                              <option value={TicketPriority.HIGH}>High</option>
+                              <option value={TicketPriority.URGENT}>Urgent</option>
+                          </select>
+                      </div>
+                      <div>
+                          <label className="block text-sm font-medium text-gray-700">Description</label>
+                          <textarea required className="w-full border rounded p-2 mt-1" rows={3} value={newTicketData.description} onChange={e => setNewTicketData({...newTicketData, description: e.target.value})} placeholder="Describe the issue..."></textarea>
+                      </div>
+                      <div className="flex justify-end gap-2 mt-6">
+                          <button type="button" onClick={() => setTicketModalOpen(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded">Cancel</button>
+                          <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Create Ticket</button>
+                      </div>
+                  </form>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Service Type</label>
-                <select className="w-full border rounded p-2 mt-1" value={newTicketData.type} onChange={e => setNewTicketData({...newTicketData, type: e.target.value})}>
-                  <option>Repair</option>
-                  <option>AMC Service</option>
-                  <option>Installation</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Priority</label>
-                <select className="w-full border rounded p-2 mt-1" value={newTicketData.priority} onChange={e => setNewTicketData({...newTicketData, priority: e.target.value as TicketPriority})}>
-                  <option value={TicketPriority.MEDIUM}>Medium</option>
-                  <option value={TicketPriority.HIGH}>High</option>
-                  <option value={TicketPriority.URGENT}>Urgent</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Problem Description</label>
-                <textarea required className="w-full border rounded p-2 mt-1" rows={3} value={newTicketData.description} onChange={e => setNewTicketData({...newTicketData, description: e.target.value})} />
-              </div>
-
-              <div className="flex justify-end gap-2 mt-6">
-                <button type="button" onClick={() => setTicketModalOpen(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Create Ticket</button>
-              </div>
-            </form>
           </div>
-        </div>
       )}
 
     </div>

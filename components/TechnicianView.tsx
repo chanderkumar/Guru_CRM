@@ -1,17 +1,24 @@
+
 import React, { useState } from 'react';
 import { Ticket, TicketStatus, Part, PaymentMode } from '../types';
-import { MapPin, Phone, Clock, Package, Check, ChevronDown, ChevronUp, Trash2, FileText } from 'lucide-react';
+import { MapPin, Phone, Clock, Package, Check, ChevronDown, ChevronUp, Trash2, FileText, XCircle } from 'lucide-react';
 
 interface TechnicianViewProps {
   tickets: Ticket[];
   parts: Part[];
   onUpdateTicket: (updatedTicket: Ticket) => void;
+  onCancelTicket: (ticketId: string, reason: string) => void;
   currentUserId: string;
 }
 
-export const TechnicianView: React.FC<TechnicianViewProps> = ({ tickets, parts, onUpdateTicket, currentUserId }) => {
+export const TechnicianView: React.FC<TechnicianViewProps> = ({ tickets, parts, onUpdateTicket, onCancelTicket, currentUserId }) => {
   const myTickets = tickets.filter(t => t.assignedTechnicianId === currentUserId && t.status !== TicketStatus.CANCELLED);
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
+  
+  // Cancel Modal State
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [ticketToCancel, setTicketToCancel] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
 
   // Form state for closing a ticket
   const [closureData, setClosureData] = useState<{
@@ -30,6 +37,22 @@ export const TechnicianView: React.FC<TechnicianViewProps> = ({ tickets, parts, 
 
   const handleStartTicket = (ticket: Ticket) => {
     onUpdateTicket({ ...ticket, status: TicketStatus.IN_PROGRESS });
+  };
+  
+  const initiateCancel = (e: React.MouseEvent, ticketId: string) => {
+      e.stopPropagation();
+      setTicketToCancel(ticketId);
+      setCancelReason('');
+      setCancelModalOpen(true);
+  };
+  
+  const confirmCancel = () => {
+      if (ticketToCancel && cancelReason) {
+          onCancelTicket(ticketToCancel, cancelReason);
+          setCancelModalOpen(false);
+          setTicketToCancel(null);
+          setCancelReason('');
+      }
   };
 
   const handleAddItem = () => {
@@ -132,12 +155,21 @@ export const TechnicianView: React.FC<TechnicianViewProps> = ({ tickets, parts, 
                 </div>
                 
                 {ticket.status === TicketStatus.ASSIGNED && (
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); handleStartTicket(ticket); }}
-                    className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition"
-                  >
-                    Start Service
-                  </button>
+                  <div className="flex gap-2">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handleStartTicket(ticket); }}
+                        className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition"
+                      >
+                        Start Service
+                      </button>
+                      <button 
+                        onClick={(e) => initiateCancel(e, ticket.id)}
+                        className="bg-red-100 text-red-600 px-4 py-3 rounded-lg font-semibold hover:bg-red-200 transition"
+                        title="Reject / Cancel"
+                      >
+                        <XCircle size={20} />
+                      </button>
+                  </div>
                 )}
 
                 {ticket.status === TicketStatus.IN_PROGRESS && (
@@ -181,7 +213,7 @@ export const TechnicianView: React.FC<TechnicianViewProps> = ({ tickets, parts, 
                           </button>
                         </div>
                       ))}
-                      <button onClick={handleAddItem} className="text-blue-600 text-sm flex items-center gap-1 font-medium hover:underline">
+                      <button onClick={handleAddItem} className="text-blue-600 text-sm flex items-center gap-1 font-medium hover:underline p-1">
                         <Package size={14} /> Add Part
                       </button>
                     </div>
@@ -191,7 +223,7 @@ export const TechnicianView: React.FC<TechnicianViewProps> = ({ tickets, parts, 
                       <label className="text-xs font-bold text-gray-500 uppercase">Service Charge (₹)</label>
                       <input 
                         type="number" 
-                        className="w-full border rounded p-2"
+                        className="w-full border rounded p-2 mt-1"
                         value={closureData.serviceCharge}
                         onChange={(e) => setClosureData({...closureData, serviceCharge: Number(e.target.value)})}
                       />
@@ -200,7 +232,7 @@ export const TechnicianView: React.FC<TechnicianViewProps> = ({ tickets, parts, 
                     <div>
                       <label className="text-xs font-bold text-gray-500 uppercase">Notes</label>
                       <textarea 
-                        className="w-full border rounded p-2"
+                        className="w-full border rounded p-2 mt-1"
                         rows={2}
                         value={closureData.notes}
                         onChange={(e) => setClosureData({...closureData, notes: e.target.value})}
@@ -211,16 +243,16 @@ export const TechnicianView: React.FC<TechnicianViewProps> = ({ tickets, parts, 
                       <label className="text-xs font-bold text-gray-500 uppercase">Next Follow Up</label>
                       <input 
                         type="date" 
-                        className="w-full border rounded p-2"
+                        className="w-full border rounded p-2 mt-1"
                         value={closureData.nextFollowUp}
                         onChange={(e) => setClosureData({...closureData, nextFollowUp: e.target.value})}
                       />
                     </div>
 
-                    <div className="bg-blue-50 p-3 rounded border border-blue-100">
-                      <div className="flex justify-between font-bold text-gray-800 mb-2">
-                        <span>Total Amount</span>
-                        <span>₹{calculateTotal()}</span>
+                    <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 mt-4 space-y-2">
+                      <div className="flex justify-between items-center text-lg">
+                        <span className="font-bold text-gray-800">Total Amount</span>
+                        <span className="font-bold text-blue-600">₹{calculateTotal().toLocaleString()}</span>
                       </div>
                       <select 
                         className="w-full border rounded p-2 text-sm"
@@ -244,6 +276,42 @@ export const TechnicianView: React.FC<TechnicianViewProps> = ({ tickets, parts, 
           </div>
         );
       })}
+
+      {/* Cancel Reason Modal */}
+      {cancelModalOpen && (
+           <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-fade-in">
+               <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+                   <h3 className="text-lg font-bold mb-2 text-red-600 flex items-center gap-2">
+                       <XCircle size={20} /> Reject / Cancel Ticket
+                   </h3>
+                   <p className="text-sm text-gray-600 mb-4">
+                       Please provide a reason for cancelling this job.
+                   </p>
+                   <textarea 
+                       className="w-full border rounded-lg p-3 text-sm focus:ring-2 focus:ring-red-500 outline-none"
+                       rows={3}
+                       placeholder="Enter reason (e.g., Customer unavailable, Wrong address)..."
+                       value={cancelReason}
+                       onChange={e => setCancelReason(e.target.value)}
+                   ></textarea>
+                   <div className="flex gap-3 mt-4">
+                       <button 
+                           onClick={() => setCancelModalOpen(false)}
+                           className="flex-1 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium"
+                       >
+                           Close
+                       </button>
+                       <button 
+                           onClick={confirmCancel}
+                           disabled={!cancelReason.trim()}
+                           className="flex-1 py-2 text-white bg-red-600 hover:bg-red-700 rounded-lg font-medium disabled:opacity-50"
+                       >
+                           Confirm
+                       </button>
+                   </div>
+               </div>
+           </div>
+       )}
     </div>
   );
 };

@@ -1,20 +1,25 @@
+
 import React, { useState } from 'react';
 import { Part } from '../types';
-import { Search, Plus, Trash2, PenTool } from 'lucide-react';
+import { Search, Plus, Trash2, PenTool, Package } from 'lucide-react';
+import { api } from '../api';
 
 interface PartsMasterProps {
   parts: Part[];
   onAddPart: (part: Part) => void;
+  onUpdatePart?: (part: Part) => void;
 }
 
-export const PartsMaster: React.FC<PartsMasterProps> = ({ parts, onAddPart }) => {
+export const PartsMaster: React.FC<PartsMasterProps> = ({ parts, onAddPart, onUpdatePart }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newPart, setNewPart] = useState({
+  const [editingPart, setEditingPart] = useState<Part | null>(null);
+  const [formData, setFormData] = useState({
     name: '',
     category: '',
     price: 0,
     warrantyMonths: 0,
+    stockQuantity: 0
   });
 
   const filteredParts = parts.filter(p => 
@@ -22,14 +27,42 @@ export const PartsMaster: React.FC<PartsMasterProps> = ({ parts, onAddPart }) =>
     p.category.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const openAddModal = () => {
+      setEditingPart(null);
+      setFormData({ name: '', category: '', price: 0, warrantyMonths: 0, stockQuantity: 0 });
+      setIsModalOpen(true);
+  };
+
+  const openEditModal = (part: Part) => {
+      setEditingPart(part);
+      setFormData({
+          name: part.name,
+          category: part.category,
+          price: part.price,
+          warrantyMonths: part.warrantyMonths,
+          stockQuantity: part.stockQuantity || 0
+      });
+      setIsModalOpen(true);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onAddPart({
-      id: `p${Date.now()}`,
-      ...newPart
-    });
+    
+    if (editingPart) {
+        if (onUpdatePart) {
+            onUpdatePart({
+                ...editingPart,
+                ...formData
+            });
+        }
+    } else {
+        onAddPart({
+            id: `p${Date.now()}`,
+            ...formData
+        });
+    }
+    
     setIsModalOpen(false);
-    setNewPart({ name: '', category: '', price: 0, warrantyMonths: 0 });
   };
 
   return (
@@ -40,7 +73,7 @@ export const PartsMaster: React.FC<PartsMasterProps> = ({ parts, onAddPart }) =>
           <p className="text-gray-500">Manage the inventory of parts used for service.</p>
         </div>
         <button 
-          onClick={() => setIsModalOpen(true)}
+          onClick={openAddModal}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"
         >
           <Plus size={18} /> Add New Part
@@ -70,6 +103,7 @@ export const PartsMaster: React.FC<PartsMasterProps> = ({ parts, onAddPart }) =>
                 <th scope="col" className="px-6 py-3">Part Name</th>
                 <th scope="col" className="px-6 py-3">Category</th>
                 <th scope="col" className="px-6 py-3">Price</th>
+                <th scope="col" className="px-6 py-3">Stock</th>
                 <th scope="col" className="px-6 py-3">Warranty</th>
                 <th scope="col" className="px-6 py-3 text-right">Actions</th>
               </tr>
@@ -80,9 +114,16 @@ export const PartsMaster: React.FC<PartsMasterProps> = ({ parts, onAddPart }) =>
                   <td className="px-6 py-4 font-medium text-gray-900">{part.name}</td>
                   <td className="px-6 py-4">{part.category}</td>
                   <td className="px-6 py-4">₹{part.price.toLocaleString()}</td>
+                  <td className="px-6 py-4">
+                      <span className={`px-2 py-1 rounded text-xs font-bold ${
+                          part.stockQuantity < 5 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'
+                      }`}>
+                          {part.stockQuantity || 0}
+                      </span>
+                  </td>
                   <td className="px-6 py-4">{part.warrantyMonths} months</td>
                   <td className="px-6 py-4 text-right">
-                    <button className="p-1 text-gray-400 hover:text-blue-600 rounded"><PenTool size={16}/></button>
+                    <button onClick={() => openEditModal(part)} className="p-1 text-gray-400 hover:text-blue-600 rounded"><PenTool size={16}/></button>
                     <button className="p-1 text-gray-400 hover:text-red-600 rounded ml-2"><Trash2 size={16}/></button>
                   </td>
                 </tr>
@@ -101,7 +142,7 @@ export const PartsMaster: React.FC<PartsMasterProps> = ({ parts, onAddPart }) =>
                   <p className="text-sm text-gray-500">{part.category}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button className="p-1 text-gray-400 hover:text-blue-600 rounded"><PenTool size={16}/></button>
+                  <button onClick={() => openEditModal(part)} className="p-1 text-gray-400 hover:text-blue-600 rounded"><PenTool size={16}/></button>
                   <button className="p-1 text-gray-400 hover:text-red-600 rounded"><Trash2 size={16}/></button>
                 </div>
               </div>
@@ -109,8 +150,11 @@ export const PartsMaster: React.FC<PartsMasterProps> = ({ parts, onAddPart }) =>
                 <div className="text-gray-600">
                   Price: <span className="font-medium text-gray-800">₹{part.price.toLocaleString()}</span>
                 </div>
-                <div className="text-gray-600">
-                  Warranty: <span className="font-medium text-gray-800">{part.warrantyMonths} months</span>
+                <div className="text-gray-600 flex items-center gap-1">
+                  Stock: 
+                  <span className={`font-medium ${part.stockQuantity < 5 ? 'text-red-600' : 'text-green-600'}`}>
+                      {part.stockQuantity}
+                  </span>
                 </div>
               </div>
             </div>
@@ -125,31 +169,37 @@ export const PartsMaster: React.FC<PartsMasterProps> = ({ parts, onAddPart }) =>
       </div>
 
 
-      {/* Add Part Modal */}
+      {/* Add/Edit Part Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-            <h3 className="text-xl font-bold mb-4">Add New Part</h3>
+            <h3 className="text-xl font-bold mb-4">{editingPart ? 'Edit Part' : 'Add New Part'}</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Part Name</label>
-                <input required type="text" className="w-full border rounded p-2 mt-1" value={newPart.name} onChange={e => setNewPart({...newPart, name: e.target.value})} />
+                <input required type="text" className="w-full border rounded p-2 mt-1" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
               </div>
                <div>
                 <label className="block text-sm font-medium text-gray-700">Category</label>
-                <input required type="text" className="w-full border rounded p-2 mt-1" value={newPart.category} onChange={e => setNewPart({...newPart, category: e.target.value})} />
+                <input required type="text" className="w-full border rounded p-2 mt-1" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} />
               </div>
-               <div>
-                <label className="block text-sm font-medium text-gray-700">Price (₹)</label>
-                <input required type="number" min="0" className="w-full border rounded p-2 mt-1" value={newPart.price} onChange={e => setNewPart({...newPart, price: Number(e.target.value)})} />
-              </div>
+               <div className="grid grid-cols-2 gap-4">
+                   <div>
+                    <label className="block text-sm font-medium text-gray-700">Price (₹)</label>
+                    <input required type="number" min="0" className="w-full border rounded p-2 mt-1" value={formData.price} onChange={e => setFormData({...formData, price: Number(e.target.value)})} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Stock Qty</label>
+                    <input required type="number" min="0" className="w-full border rounded p-2 mt-1" value={formData.stockQuantity} onChange={e => setFormData({...formData, stockQuantity: Number(e.target.value)})} />
+                  </div>
+               </div>
                <div>
                 <label className="block text-sm font-medium text-gray-700">Warranty (Months)</label>
-                <input required type="number" min="0" className="w-full border rounded p-2 mt-1" value={newPart.warrantyMonths} onChange={e => setNewPart({...newPart, warrantyMonths: Number(e.target.value)})} />
+                <input required type="number" min="0" className="w-full border rounded p-2 mt-1" value={formData.warrantyMonths} onChange={e => setFormData({...formData, warrantyMonths: Number(e.target.value)})} />
               </div>
               <div className="flex justify-end gap-2 mt-6">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Add Part</button>
+                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">{editingPart ? 'Update' : 'Add Part'}</button>
               </div>
             </form>
           </div>

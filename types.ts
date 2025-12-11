@@ -37,7 +37,8 @@ export enum LeadStatus {
   FOLLOW_UP = 'Follow-Up',
   ESTIMATE = 'Estimate Sent',
   SOLD = 'Sold',
-  INSTALLED = 'Installed'
+  INSTALLED = 'Installed',
+  LOST = 'Lost'
 }
 
 export interface Part {
@@ -46,6 +47,7 @@ export interface Part {
   category: string;
   price: number;
   warrantyMonths: number;
+  stockQuantity: number;
 }
 
 export interface MachineType {
@@ -57,7 +59,8 @@ export interface MachineType {
 }
 
 export interface Machine {
-  modelNo: string; // This can be the model name or specific serial
+  id?: number | string; // Made optional for creation, but required for updates
+  modelNo: string; 
   installationDate: string;
   warrantyExpiry: string;
   amcActive: boolean;
@@ -96,6 +99,7 @@ export interface Ticket {
   paymentMode?: PaymentMode;
   technicianNotes?: string;
   nextFollowUp?: string;
+  cancellationReason?: string;
 }
 
 export interface AssignmentHistory {
@@ -110,12 +114,24 @@ export interface Lead {
   id: string;
   name: string;
   phone: string;
+  email?: string;
+  address?: string;
   source: string;
   status: LeadStatus;
   notes: string;
   createdAt: string;
   nextFollowUp?: string;
   estimateValue?: number;
+  assignedTo?: string; // User ID
+}
+
+export interface LeadHistory {
+  id: number;
+  leadId: string;
+  action: string; // 'Status Change', 'Note', 'Edit', 'Created'
+  details: string;
+  timestamp: string;
+  performedBy?: string;
 }
 
 export interface User {
@@ -127,4 +143,13 @@ export interface User {
   phone?: string;
   address?: string;
   status: 'Active' | 'Inactive';
+}
+
+export interface AmcExpiry {
+  customerId: string;
+  customerName: string;
+  phone: string;
+  machineModel: string;
+  expiryDate: string;
+  daysRemaining: number;
 }
