@@ -18,7 +18,7 @@ export async function initDb() {
     CREATE TABLE IF NOT EXISTS customers (
       id TEXT PRIMARY KEY,
       name TEXT,
-      phone TEXT,
+      phone TEXT UNIQUE,
       address TEXT,
       type TEXT
     );
@@ -111,7 +111,7 @@ export async function initDb() {
       email TEXT UNIQUE,
       password TEXT,
       role TEXT,
-      phone TEXT,
+      phone TEXT UNIQUE,
       address TEXT,
       status TEXT DEFAULT 'Active'
     );

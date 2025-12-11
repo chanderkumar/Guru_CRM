@@ -1,7 +1,7 @@
-
 import React, { useState } from 'react';
 import { Customer, CustomerType, Machine, Ticket, TicketPriority, TicketStatus, MachineType } from '../types';
 import { Search, MapPin, Shield, Plus, Ticket as TicketIcon, Calendar, CheckCircle, X, Monitor, AlertCircle, PenTool, Trash2 } from 'lucide-react';
+import { ToastType } from './Toast';
 
 interface CustomerMasterProps {
   customers: Customer[];
@@ -12,9 +12,10 @@ interface CustomerMasterProps {
   onUpdateMachine: (customerId: string, machineId: string | number, machine: Machine) => void;
   onDeleteMachine: (customerId: string, machineId: string | number) => void;
   onCreateTicket: (ticket: Partial<Ticket>) => void;
+  showToast: (msg: string, type: ToastType) => void;
 }
 
-export const CustomerMaster: React.FC<CustomerMasterProps> = ({ customers, tickets, machineTypes, onAddCustomer, onAddMachine, onUpdateMachine, onDeleteMachine, onCreateTicket }) => {
+export const CustomerMaster: React.FC<CustomerMasterProps> = ({ customers, tickets, machineTypes, onAddCustomer, onAddMachine, onUpdateMachine, onDeleteMachine, onCreateTicket, showToast }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'All' | CustomerType>('All');
   const [expandedId, setExpandedId] = useState<string | null>(null);

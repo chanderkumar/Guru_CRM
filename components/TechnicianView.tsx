@@ -1,7 +1,7 @@
-
 import React, { useState } from 'react';
 import { Ticket, TicketStatus, Part, PaymentMode } from '../types';
 import { MapPin, Phone, Clock, Package, Check, ChevronDown, ChevronUp, Trash2, FileText, XCircle } from 'lucide-react';
+import { ToastType } from './Toast';
 
 interface TechnicianViewProps {
   tickets: Ticket[];
@@ -9,9 +9,10 @@ interface TechnicianViewProps {
   onUpdateTicket: (updatedTicket: Ticket) => void;
   onCancelTicket: (ticketId: string, reason: string) => void;
   currentUserId: string;
+  showToast: (msg: string, type: ToastType) => void;
 }
 
-export const TechnicianView: React.FC<TechnicianViewProps> = ({ tickets, parts, onUpdateTicket, onCancelTicket, currentUserId }) => {
+export const TechnicianView: React.FC<TechnicianViewProps> = ({ tickets, parts, onUpdateTicket, onCancelTicket, currentUserId, showToast }) => {
   const myTickets = tickets.filter(t => t.assignedTechnicianId === currentUserId && t.status !== TicketStatus.CANCELLED);
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
   
@@ -37,6 +38,7 @@ export const TechnicianView: React.FC<TechnicianViewProps> = ({ tickets, parts, 
 
   const handleStartTicket = (ticket: Ticket) => {
     onUpdateTicket({ ...ticket, status: TicketStatus.IN_PROGRESS });
+    showToast("Service started.", "info");
   };
   
   const initiateCancel = (e: React.MouseEvent, ticketId: string) => {

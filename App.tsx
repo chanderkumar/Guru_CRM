@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { USERS } from './constants';
-import { Ticket, User, Role, TicketStatus, Lead, LeadStatus, Customer, Machine, Part, MachineType, TicketPriority, AmcExpiry } from './types';
+import { Ticket, User, Role, TicketStatus, Lead, LeadStatus, Customer, Machine, Part, MachineType, TicketPriority, AmcExpiry, GlobalSearchResult } from './types';
 import { Dashboard } from './components/Dashboard';
 import { TicketBoard } from './components/TicketBoard';
 import { TechnicianView } from './components/TechnicianView';
@@ -12,7 +11,8 @@ import { MachineMaster } from './components/MachineMaster';
 import { UserManagement } from './components/UserManagement';
 import { Reports } from './components/Reports';
 import { Login } from './components/Login';
-import { LayoutDashboard, Ticket as TicketIcon, Users, ShoppingCart, Wrench, Package, Menu, Database, AlertCircle, RefreshCw, Monitor, X, Shield, LogOut, BarChart3 } from 'lucide-react';
+import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
+import { LayoutDashboard, Ticket as TicketIcon, Users, ShoppingCart, Wrench, Package, Menu, Database, AlertCircle, RefreshCw, Monitor, X, Shield, LogOut, BarChart3, Search, Phone, History, MapPin } from 'lucide-react';
 import { api } from './api';
 
 const App: React.FC = () => {
@@ -23,6 +23,14 @@ const App: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isOffline, setIsOffline] = useState(false);
+
+  // Search State
+  const [searchPhone, setSearchPhone] = useState('');
+  const [searchResult, setSearchResult] = useState<GlobalSearchResult | null>(null);
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+
+  // Toasts State
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   // Application State
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -72,9 +80,19 @@ const App: React.FC = () => {
       setIsOffline(data.isOffline);
     } catch (e) {
       console.error("Failed to load data", e);
+      showToast("Failed to load data. Please check server.", "error");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const showToast = (message: string, type: ToastType) => {
+    const id = Date.now().toString();
+    setToasts(prev => [...prev, { id, message, type }]);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
   };
 
   const handleLogin = (user: User) => {
@@ -82,12 +100,25 @@ const App: React.FC = () => {
       setIsAuthenticated(true);
       localStorage.setItem('guru_user', JSON.stringify(user));
       setActiveTab(user.role === Role.TECHNICIAN ? 'technician' : 'dashboard');
+      showToast(`Welcome back, ${user.name}`, 'success');
   };
 
   const handleLogout = () => {
       setIsAuthenticated(false);
       setCurrentUser(null);
       localStorage.removeItem('guru_user');
+  };
+  
+  const handleGlobalSearch = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!searchPhone.trim()) return;
+      try {
+          const res = await api.searchByPhone(searchPhone);
+          setSearchResult(res);
+          setIsSearchModalOpen(true);
+      } catch (e) {
+          showToast("Search failed or no connection.", "error");
+      }
   };
 
   // --- Handlers ---
@@ -108,8 +139,14 @@ const App: React.FC = () => {
       paymentMode: undefined,
     };
     setTickets(prev => [newTicket, ...prev]);
-    try { await api.createTicket(newTicket); } 
-    catch (error) { alert("Failed. Reverting."); setTickets(prev => prev.filter(t => t.id !== newTicket.id)); }
+    try { 
+        await api.createTicket(newTicket);
+        showToast("Ticket created successfully", "success");
+    } 
+    catch (error) { 
+        showToast("Failed to create ticket. Reverting.", "error"); 
+        setTickets(prev => prev.filter(t => t.id !== newTicket.id)); 
+    }
   };
 
   const handleAssignTicket = async (ticketId: string, techId: string, scheduledDate: string) => {
@@ -118,8 +155,14 @@ const App: React.FC = () => {
     const oldTicket = tickets[ticketIndex];
     const updatedTicket = { ...oldTicket, status: TicketStatus.ASSIGNED, assignedTechnicianId: techId, scheduledDate };
     setTickets(prev => { const n = [...prev]; n[ticketIndex] = updatedTicket; return n; });
-    try { await api.updateTicket(updatedTicket); } 
-    catch (error) { alert("Failed. Reverting."); setTickets(prev => { const n = [...prev]; n[ticketIndex] = oldTicket; return n; }); }
+    try { 
+        await api.updateTicket(updatedTicket); 
+        showToast("Ticket assigned successfully", "success");
+    } 
+    catch (error) { 
+        showToast("Assignment failed. Reverting.", "error"); 
+        setTickets(prev => { const n = [...prev]; n[ticketIndex] = oldTicket; return n; }); 
+    }
   };
 
   const handleUpdateTicket = async (updatedTicket: Ticket) => {
@@ -129,9 +172,15 @@ const App: React.FC = () => {
     try { 
         await api.updateTicket(updatedTicket); 
         // Reload parts stock if completed
-        if (updatedTicket.status === TicketStatus.COMPLETED) loadData(); 
+        if (updatedTicket.status === TicketStatus.COMPLETED) {
+            loadData(); 
+            showToast("Ticket marked as completed!", "success");
+        }
     } 
-    catch (error) { alert("Failed. Reverting."); setTickets(prev => { const n = [...prev]; n[ticketIndex] = oldTicket; return n; }); }
+    catch (error) { 
+        showToast("Failed to update ticket.", "error"); 
+        setTickets(prev => { const n = [...prev]; n[ticketIndex] = oldTicket; return n; }); 
+    }
   };
 
   const handleCancelTicket = async (ticketId: string, reason: string) => {
@@ -148,28 +197,35 @@ const App: React.FC = () => {
       
       try {
           await api.updateTicket(updatedTicket);
+          showToast("Ticket cancelled.", "info");
       } catch (error) {
-          alert("Failed to cancel ticket. Reverting.");
+          showToast("Failed to cancel ticket.", "error");
           setTickets(prev => { const n = [...prev]; n[ticketIndex] = oldTicket; return n; });
       }
   };
 
   const handleAddCustomer = async (newCustomer: Customer) => {
     setCustomers(prev => [...prev, newCustomer]);
-    try { await api.createCustomer(newCustomer); } 
-    catch (error) { alert("Failed. Reverting."); setCustomers(prev => prev.filter(c => c.id !== newCustomer.id)); }
+    try { 
+        await api.createCustomer(newCustomer); 
+        showToast("Customer added successfully", "success");
+    } 
+    catch (error: any) { 
+        showToast(error.message || "Failed to add customer.", "error"); 
+        setCustomers(prev => prev.filter(c => c.id !== newCustomer.id)); 
+    }
   };
 
   const handleAddMachine = async (customerId: string, machine: Machine) => {
-    // Optimistic update difficult without ID from server, so we'll just reload or handle in success
     try { 
         const res = await api.addMachine(customerId, machine); 
         if(res.success && res.id) {
             const machineWithId = { ...machine, id: res.id };
             setCustomers(prev => prev.map(c => c.id === customerId ? { ...c, machines: [...c.machines, machineWithId] } : c));
+            showToast("Machine added successfully", "success");
         }
     } 
-    catch (error) { alert("Failed to add machine."); }
+    catch (error) { showToast("Failed to add machine.", "error"); }
   };
 
   const handleUpdateMachine = async (customerId: string, machineId: string | number, updatedMachine: Machine) => {
@@ -184,8 +240,9 @@ const App: React.FC = () => {
 
       try {
           await api.updateMachine(machineId, updatedMachine);
+          showToast("Machine updated", "success");
       } catch (e) {
-          alert("Failed to update machine.");
+          showToast("Failed to update machine.", "error");
           setCustomers(oldCustomers);
       }
   };
@@ -202,16 +259,23 @@ const App: React.FC = () => {
 
       try {
           await api.deleteMachine(machineId);
+          showToast("Machine deleted", "info");
       } catch (e) {
-          alert("Failed to delete machine.");
+          showToast("Failed to delete machine.", "error");
           setCustomers(oldCustomers);
       }
   }
 
   const handleAddLead = async (lead: Lead) => {
     setLeads(prev => [...prev, lead]);
-    try { await api.createLead(lead); } 
-    catch (error) { alert("Failed. Reverting."); setLeads(prev => prev.filter(l => l.id !== lead.id)); }
+    try { 
+        await api.createLead(lead); 
+        showToast("Lead created", "success");
+    } 
+    catch (error) { 
+        showToast("Failed to create lead.", "error"); 
+        setLeads(prev => prev.filter(l => l.id !== lead.id)); 
+    }
   };
 
   const handleUpdateLead = async (id: string, updates: Partial<Lead>) => {
@@ -219,69 +283,111 @@ const App: React.FC = () => {
     const oldLead = leads[leadIndex];
     const updatedLead = { ...oldLead, ...updates };
     setLeads(prev => prev.map(l => l.id === id ? updatedLead : l));
-    try { await api.updateLead(id, updates); } 
-    catch (error) { alert("Failed. Reverting."); setLeads(prev => { const n = [...prev]; n[leadIndex] = oldLead; return n; }); }
+    try { 
+        await api.updateLead(id, updates); 
+        showToast("Lead updated", "success");
+    } 
+    catch (error) { 
+        showToast("Failed update.", "error"); 
+        setLeads(prev => { const n = [...prev]; n[leadIndex] = oldLead; return n; }); 
+    }
   };
 
   const handleDeleteLead = async (id: string) => {
       const oldLeads = [...leads];
       setLeads(prev => prev.filter(l => l.id !== id));
-      try { await api.deleteLead(id); }
-      catch (error) { alert("Failed. Reverting."); setLeads(oldLeads); }
+      try { 
+          await api.deleteLead(id); 
+          showToast("Lead deleted", "info");
+      }
+      catch (error) { 
+          showToast("Failed to delete lead.", "error"); 
+          setLeads(oldLeads); 
+      }
   }
 
-  const handleConvertLead = async (id: string) => {
-      try {
-          const res = await api.convertLeadToCustomer(id);
-          if (res.success) {
-              await loadData(); // Reload to get new customer and updated lead status
-              alert("Lead converted successfully!");
-          }
-      } catch (error) {
-          alert("Conversion failed.");
-      }
+  const handleConvertLead = async (id: string, details: any) => {
+      // This is primarily handled in SalesFlow but we refresh data here
+      await loadData();
+      showToast("Lead converted to Customer!", "success");
   }
 
   const handleAddPart = async (part: Part) => {
     setParts(prev => [...prev, part]);
-    try { await api.createPart(part); } 
-    catch (error) { alert("Failed. Reverting."); setParts(prev => prev.filter(p => p.id !== part.id)); }
+    try { 
+        await api.createPart(part); 
+        showToast("Part added", "success");
+    } 
+    catch (error) { 
+        showToast("Failed to add part.", "error"); 
+        setParts(prev => prev.filter(p => p.id !== part.id)); 
+    }
   };
 
   const handleUpdatePart = async (part: Part) => {
       const idx = parts.findIndex(p => p.id === part.id);
       const oldPart = parts[idx];
       setParts(prev => prev.map(p => p.id === part.id ? part : p));
-      try { await api.updatePart(part); }
-      catch (e) { alert("Failed update"); setParts(prev => { const n = [...prev]; n[idx] = oldPart; return n; }); }
+      try { 
+          await api.updatePart(part); 
+          showToast("Part updated", "success");
+      }
+      catch (e) { 
+          showToast("Failed to update part.", "error"); 
+          setParts(prev => { const n = [...prev]; n[idx] = oldPart; return n; }); 
+      }
   }
 
   const handleAddMachineType = async (type: MachineType) => {
       setMachineTypes(prev => [...prev, type]);
-      try { await api.createMachineType(type); } 
-      catch (error) { alert("Failed. Reverting."); setMachineTypes(prev => prev.filter(m => m.id !== type.id)); }
+      try { 
+          await api.createMachineType(type); 
+          showToast("Machine model added", "success");
+      } 
+      catch (error) { 
+          showToast("Failed.", "error"); 
+          setMachineTypes(prev => prev.filter(m => m.id !== type.id)); 
+      }
   };
 
   // --- User Management Handlers ---
   const handleAddUser = async (user: User) => {
       setUsers(prev => [...prev, user]);
-      try { await api.createUser(user); } 
-      catch (error) { alert("Failed to save user."); setUsers(prev => prev.filter(u => u.id !== user.id)); }
+      try { 
+          await api.createUser(user); 
+          showToast("User created", "success");
+      } 
+      catch (error: any) { 
+          showToast(error.message || "Failed to save user.", "error"); 
+          setUsers(prev => prev.filter(u => u.id !== user.id)); 
+      }
   };
   
   const handleUpdateUser = async (id: string, updates: Partial<User>) => {
       const idx = users.findIndex(u => u.id === id);
       const oldUser = users[idx];
       setUsers(prev => prev.map(u => u.id === id ? { ...u, ...updates } : u));
-      try { await api.updateUser(id, updates); }
-      catch (e) { alert("Failed update"); setUsers(prev => { const n = [...prev]; n[idx] = oldUser; return n; }); }
+      try { 
+          await api.updateUser(id, updates);
+          showToast("User updated", "success");
+      }
+      catch (e: any) { 
+          showToast(e.message || "Failed update", "error"); 
+          setUsers(prev => { const n = [...prev]; n[idx] = oldUser; return n; }); 
+      }
   };
 
   const handleDeleteUser = async (id: string) => {
       const oldUsers = [...users];
       setUsers(prev => prev.filter(u => u.id !== id));
-      try { await api.deleteUser(id); }
-      catch (e) { alert("Failed delete. " + e.message); setUsers(oldUsers); }
+      try { 
+          await api.deleteUser(id); 
+          showToast("User deleted", "info");
+      }
+      catch (e: any) { 
+          showToast("Failed delete. " + e.message, "error"); 
+          setUsers(oldUsers); 
+      }
   }
 
 
@@ -307,6 +413,8 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
+
       {/* Mobile Header */}
       <div className="md:hidden bg-white p-4 flex justify-between items-center shadow-sm z-20 relative">
         <div className="flex items-center gap-2 font-bold text-gray-800">
@@ -314,7 +422,9 @@ const App: React.FC = () => {
           <span>GuruTech ERP</span>
         </div>
         <div className="flex items-center gap-2">
-            {isOffline && <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded-full flex items-center gap-1"><AlertCircle size={12}/> Offline</span>}
+             <button onClick={() => setIsSearchModalOpen(true)} className="p-2 text-gray-500">
+                 <Search size={20} />
+             </button>
             <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold">
                 {currentUser?.name.charAt(0)}
             </div>
@@ -365,7 +475,24 @@ const App: React.FC = () => {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 h-[calc(100vh-60px)] md:h-screen overflow-y-auto bg-gray-50 p-4 md:p-8">
+      <main className="flex-1 h-[calc(100vh-60px)] md:h-screen overflow-y-auto bg-gray-50 p-4 md:p-8 relative">
+        {/* Desktop Top Bar */}
+        <div className="hidden md:flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold text-gray-800 capitalize">
+                {activeTab === 'dashboard' ? 'Overview' : activeTab.replace('-', ' ')}
+            </h2>
+            <form onSubmit={handleGlobalSearch} className="relative w-96">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <input 
+                  type="text" 
+                  placeholder="Universal Search (Enter Phone Number)..." 
+                  className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none shadow-sm"
+                  value={searchPhone}
+                  onChange={(e) => setSearchPhone(e.target.value)}
+                />
+            </form>
+        </div>
+
         <div className="max-w-7xl mx-auto animate-fade-in">
             {isOffline && (
                 <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative" role="alert">
@@ -374,10 +501,10 @@ const App: React.FC = () => {
                 </div>
             )}
 
-          {activeTab === 'dashboard' && <Dashboard tickets={tickets} amcExpiries={amcExpiries} onCreateTicket={handleCreateTicket} />}
-          {activeTab === 'tickets' && <TicketBoard tickets={tickets} technicians={technicians} customers={customers} onAssign={handleAssignTicket} onCreateTicket={handleCreateTicket} onAddCustomer={handleAddCustomer} onCancelTicket={handleCancelTicket} />}
-          {activeTab === 'technician' && <TechnicianView tickets={tickets} parts={parts} onUpdateTicket={handleUpdateTicket} onCancelTicket={handleCancelTicket} currentUserId={currentUser!.id} />}
-          {activeTab === 'sales' && <SalesFlow leads={leads} onAddLead={handleAddLead} onUpdateLead={handleUpdateLead} onDeleteLead={handleDeleteLead} onConvertLead={handleConvertLead} />}
+          {activeTab === 'dashboard' && <Dashboard tickets={tickets} amcExpiries={amcExpiries} onCreateTicket={handleCreateTicket} showToast={showToast} />}
+          {activeTab === 'tickets' && <TicketBoard tickets={tickets} technicians={technicians} customers={customers} onAssign={handleAssignTicket} onCreateTicket={handleCreateTicket} onAddCustomer={handleAddCustomer} onCancelTicket={handleCancelTicket} showToast={showToast} />}
+          {activeTab === 'technician' && <TechnicianView tickets={tickets} parts={parts} onUpdateTicket={handleUpdateTicket} onCancelTicket={handleCancelTicket} currentUserId={currentUser!.id} showToast={showToast} />}
+          {activeTab === 'sales' && <SalesFlow leads={leads} onAddLead={handleAddLead} onUpdateLead={handleUpdateLead} onDeleteLead={handleDeleteLead} onConvertLead={handleConvertLead} machineTypes={machineTypes} showToast={showToast} />}
           {activeTab === 'reports' && <Reports tickets={tickets} />}
           {activeTab === 'customers' && (
             <CustomerMaster 
@@ -389,13 +516,127 @@ const App: React.FC = () => {
                 onUpdateMachine={handleUpdateMachine}
                 onDeleteMachine={handleDeleteMachine}
                 onCreateTicket={handleCreateTicket}
+                showToast={showToast}
             />
           )}
-          {activeTab === 'parts' && <PartsMaster parts={parts} onAddPart={handleAddPart} onUpdatePart={handleUpdatePart} />}
-          {activeTab === 'machines' && <MachineMaster machineTypes={machineTypes} onAddMachineType={handleAddMachineType} />}
-          {activeTab === 'users' && <UserManagement users={users} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser} onDeleteUser={handleDeleteUser} />}
+          {activeTab === 'parts' && <PartsMaster parts={parts} onAddPart={handleAddPart} onUpdatePart={handleUpdatePart} showToast={showToast} />}
+          {activeTab === 'machines' && <MachineMaster machineTypes={machineTypes} onAddMachineType={handleAddMachineType} showToast={showToast} />}
+          {activeTab === 'users' && <UserManagement users={users} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser} onDeleteUser={handleDeleteUser} showToast={showToast} />}
         </div>
       </main>
+
+      {/* Global Search Modal */}
+      {isSearchModalOpen && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[70] animate-fade-in">
+              <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full p-6 max-h-[90vh] overflow-y-auto">
+                  <div className="flex justify-between items-center mb-6 border-b pb-4">
+                      <div className="flex items-center gap-3">
+                          <div className="p-3 bg-blue-100 text-blue-600 rounded-full">
+                              <Phone size={24} />
+                          </div>
+                          <div>
+                              <h3 className="text-xl font-bold">Search Results</h3>
+                              <p className="text-gray-500 text-sm">Query: {searchResult?.phone || searchPhone}</p>
+                          </div>
+                      </div>
+                      <button onClick={() => setIsSearchModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                          <X size={24} />
+                      </button>
+                  </div>
+
+                  {!searchResult || (searchResult.leads.length === 0 && searchResult.customers.length === 0 && searchResult.tickets.length === 0) ? (
+                      <div className="text-center py-12 text-gray-500">
+                          <p>No records found for this phone number.</p>
+                      </div>
+                  ) : (
+                      <div className="space-y-8">
+                          {/* Leads Section */}
+                          {searchResult.leads.length > 0 && (
+                              <div>
+                                  <h4 className="font-bold text-gray-700 uppercase tracking-wide text-sm mb-3 flex items-center gap-2">
+                                      <Users size={16}/> Leads / Inquiries
+                                  </h4>
+                                  <div className="grid gap-3">
+                                      {searchResult.leads.map(lead => (
+                                          <div key={lead.id} className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                                              <div className="flex justify-between">
+                                                  <span className="font-bold">{lead.name}</span>
+                                                  <span className="text-xs font-bold bg-white px-2 py-1 rounded">{lead.status}</span>
+                                              </div>
+                                              <p className="text-sm text-gray-600 mt-1">{lead.notes}</p>
+                                              <p className="text-xs text-gray-400 mt-2">Created: {lead.createdAt}</p>
+                                          </div>
+                                      ))}
+                                  </div>
+                              </div>
+                          )}
+
+                          {/* Customers Section */}
+                          {searchResult.customers.length > 0 && (
+                              <div>
+                                  <h4 className="font-bold text-gray-700 uppercase tracking-wide text-sm mb-3 flex items-center gap-2">
+                                      <Database size={16}/> Customer Profiles
+                                  </h4>
+                                  <div className="grid gap-3">
+                                      {searchResult.customers.map(cust => (
+                                          <div key={cust.id} className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                                              <div className="flex justify-between">
+                                                  <span className="font-bold text-lg">{cust.name}</span>
+                                                  <span className="text-sm text-blue-700">{cust.type}</span>
+                                              </div>
+                                              <p className="text-sm text-gray-600 flex items-center gap-1 mt-1"><MapPin size={14}/> {cust.address}</p>
+                                              
+                                              {cust.machines && cust.machines.length > 0 && (
+                                                  <div className="mt-3 bg-white p-2 rounded">
+                                                      <p className="text-xs font-bold text-gray-500 uppercase">Machines</p>
+                                                      {cust.machines.map((m, idx) => (
+                                                          <div key={idx} className="text-sm flex justify-between mt-1">
+                                                              <span>{m.modelNo}</span>
+                                                              <span className={m.amcActive ? "text-green-600 font-bold" : "text-gray-400"}>{m.amcActive ? 'AMC Active' : 'No AMC'}</span>
+                                                          </div>
+                                                      ))}
+                                                  </div>
+                                              )}
+                                          </div>
+                                      ))}
+                                  </div>
+                              </div>
+                          )}
+
+                          {/* Tickets Section */}
+                          {searchResult.tickets.length > 0 && (
+                              <div>
+                                  <h4 className="font-bold text-gray-700 uppercase tracking-wide text-sm mb-3 flex items-center gap-2">
+                                      <TicketIcon size={16}/> Service History
+                                  </h4>
+                                  <div className="space-y-2">
+                                      {searchResult.tickets.map(t => (
+                                          <div key={t.id} className="bg-white p-3 border rounded flex justify-between items-center">
+                                              <div>
+                                                  <div className="flex items-center gap-2">
+                                                      <span className="font-mono text-xs text-gray-400">#{t.id}</span>
+                                                      <span className="font-bold text-sm">{t.type}</span>
+                                                  </div>
+                                                  <p className="text-sm text-gray-600">{t.description}</p>
+                                              </div>
+                                              <div className="text-right">
+                                                  <span className={`text-xs px-2 py-1 rounded font-bold ${
+                                                      t.status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                                                  }`}>
+                                                      {t.status}
+                                                  </span>
+                                                  <p className="text-xs text-gray-400 mt-1">{t.scheduledDate}</p>
+                                              </div>
+                                          </div>
+                                      ))}
+                                  </div>
+                              </div>
+                          )}
+                      </div>
+                  )}
+              </div>
+          </div>
+      )}
     </div>
   );
 };

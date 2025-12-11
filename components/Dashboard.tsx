@@ -1,18 +1,19 @@
-
 import React, { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Ticket, TicketStatus, AmcExpiry, TicketPriority } from '../types';
 import { Activity, AlertTriangle, CheckCircle, IndianRupee, Clock, Ticket as TicketIcon } from 'lucide-react';
+import { ToastType } from './Toast';
 
 interface DashboardProps {
   tickets: Ticket[];
   amcExpiries?: AmcExpiry[];
   onCreateTicket: (ticket: Partial<Ticket>) => void;
+  showToast: (msg: string, type: ToastType) => void;
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
-export const Dashboard: React.FC<DashboardProps> = ({ tickets, amcExpiries = [], onCreateTicket }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ tickets, amcExpiries = [], onCreateTicket, showToast }) => {
   const [renewModalOpen, setRenewModalOpen] = useState(false);
   const [selectedAmc, setSelectedAmc] = useState<AmcExpiry | null>(null);
 
@@ -46,6 +47,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ tickets, amcExpiries = [],
       scheduledDate: new Date().toISOString().split('T')[0]
     });
 
+    showToast("Renewal ticket created", "success");
     setRenewModalOpen(false);
     setSelectedAmc(null);
   };

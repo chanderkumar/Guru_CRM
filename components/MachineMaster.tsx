@@ -1,14 +1,15 @@
-
 import React, { useState } from 'react';
 import { MachineType } from '../types';
 import { Search, Plus, Trash2, PenTool, Monitor } from 'lucide-react';
+import { ToastType } from './Toast';
 
 interface MachineMasterProps {
   machineTypes: MachineType[];
   onAddMachineType: (type: MachineType) => void;
+  showToast: (msg: string, type: ToastType) => void;
 }
 
-export const MachineMaster: React.FC<MachineMasterProps> = ({ machineTypes, onAddMachineType }) => {
+export const MachineMaster: React.FC<MachineMasterProps> = ({ machineTypes, onAddMachineType, showToast }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newMachine, setNewMachine] = useState({

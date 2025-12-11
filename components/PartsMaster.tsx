@@ -1,16 +1,17 @@
-
 import React, { useState } from 'react';
 import { Part } from '../types';
 import { Search, Plus, Trash2, PenTool, Package } from 'lucide-react';
 import { api } from '../api';
+import { ToastType } from './Toast';
 
 interface PartsMasterProps {
   parts: Part[];
   onAddPart: (part: Part) => void;
   onUpdatePart?: (part: Part) => void;
+  showToast: (msg: string, type: ToastType) => void;
 }
 
-export const PartsMaster: React.FC<PartsMasterProps> = ({ parts, onAddPart, onUpdatePart }) => {
+export const PartsMaster: React.FC<PartsMasterProps> = ({ parts, onAddPart, onUpdatePart, showToast }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPart, setEditingPart] = useState<Part | null>(null);

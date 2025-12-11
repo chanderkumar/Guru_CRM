@@ -1,9 +1,9 @@
-
 import React, { useState } from 'react';
 import { Customer, Ticket, TicketPriority, TicketStatus, User, CustomerType, AssignmentHistory } from '../types';
 import { Calendar, User as UserIcon, AlertCircle, Plus, Building, Search, X, Edit2, History as HistoryIcon, Clock, FileText, Trash2, Ban } from 'lucide-react';
 import { api } from '../api';
 import { InvoiceView } from './InvoiceView';
+import { ToastType } from './Toast';
 
 interface TicketBoardProps {
   tickets: Ticket[];
@@ -13,9 +13,10 @@ interface TicketBoardProps {
   onCreateTicket: (ticket: Partial<Ticket>) => void;
   onAddCustomer: (customer: Customer) => void;
   onCancelTicket: (ticketId: string, reason: string) => void;
+  showToast: (msg: string, type: ToastType) => void;
 }
 
-export const TicketBoard: React.FC<TicketBoardProps> = ({ tickets, technicians, customers, onAssign, onCreateTicket, onAddCustomer, onCancelTicket }) => {
+export const TicketBoard: React.FC<TicketBoardProps> = ({ tickets, technicians, customers, onAssign, onCreateTicket, onAddCustomer, onCancelTicket, showToast }) => {
   const [filter, setFilter] = useState<TicketStatus | 'All'>('All');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isQuickAddCustomerOpen, setQuickAddCustomerOpen] = useState(false);
@@ -110,6 +111,8 @@ export const TicketBoard: React.FC<TicketBoardProps> = ({ tickets, technicians, 
       onAssign(assignModal.ticketId, assignModal.techId, assignDateTime);
       setAssignModal(null);
       setAssignDateTime('');
+    } else {
+        showToast("Please select date and time", "error");
     }
   };
 

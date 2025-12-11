@@ -123,6 +123,7 @@ export interface Lead {
   nextFollowUp?: string;
   estimateValue?: number;
   assignedTo?: string; // User ID
+  lossReason?: string; // For Lost leads
 }
 
 export interface LeadHistory {
@@ -152,4 +153,11 @@ export interface AmcExpiry {
   machineModel: string;
   expiryDate: string;
   daysRemaining: number;
+}
+
+export interface GlobalSearchResult {
+  phone: string;
+  leads: Lead[];
+  customers: Customer[];
+  tickets: Ticket[];
 }

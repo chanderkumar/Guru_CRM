@@ -1,4 +1,3 @@
-
 import express from 'express';
 import cors from 'cors';
 import { initDb, getDb } from './database.js';
@@ -33,6 +32,38 @@ app.post('/api/login', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Global Search (By Phone)
+app.get('/api/search', async (req, res) => {
+    const { phone } = req.query;
+    if (!phone) return res.status(400).json({ error: "Phone number required" });
+    
+    try {
+        const db = getDb();
+        const searchPattern = `%${phone}%`;
+
+        // Parallel queries
+        const leads = await db.all('SELECT * FROM leads WHERE phone LIKE ?', [searchPattern]);
+        const customers = await db.all('SELECT * FROM customers WHERE phone LIKE ?', [searchPattern]);
+        
+        // Populate machines for customers
+        for (let customer of customers) {
+            customer.machines = await db.all('SELECT * FROM machines WHERE customerId = ?', [customer.id]);
+        }
+
+        // Find tickets for those customers OR tickets where customer phone might be stored (if we stored phone in tickets, which we don't, we join on customerId)
+        // Since tickets link to customerId, we find tickets for the found customers
+        let tickets = [];
+        if (customers.length > 0) {
+            const customerIds = customers.map(c => `'${c.id}'`).join(',');
+            tickets = await db.all(`SELECT * FROM tickets WHERE customerId IN (${customerIds}) ORDER BY scheduledDate DESC`);
+        }
+
+        res.json({ phone, leads, customers, tickets });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Get All Initial Data
@@ -192,6 +223,13 @@ app.post('/api/customers', async (req, res) => {
   const { id, name, phone, address, type } = req.body;
   try {
     const db = getDb();
+    
+    // UNIQUE PHONE CHECK
+    const existing = await db.get('SELECT id FROM customers WHERE phone = ?', [phone]);
+    if (existing) {
+        return res.status(400).json({ error: 'Customer with this phone number already exists.' });
+    }
+
     await db.run(
       'INSERT INTO customers (id, name, phone, address, type) VALUES (?, ?, ?, ?, ?)',
       [id, name, phone, address, type]
@@ -272,7 +310,7 @@ app.put('/api/leads/:id', async (req, res) => {
   
   try {
     const db = getDb();
-    const allowed = ['name', 'phone', 'email', 'address', 'status', 'nextFollowUp', 'estimateValue', 'notes'];
+    const allowed = ['name', 'phone', 'email', 'address', 'status', 'nextFollowUp', 'estimateValue', 'notes', 'lossReason'];
     const sqlUpdates = [];
     const values = [];
 
@@ -308,6 +346,11 @@ app.put('/api/leads/:id', async (req, res) => {
          await db.run(`INSERT INTO lead_history (leadId, action, details, timestamp) VALUES (?, ?, ?, ?)`, 
             [id, 'Follow-up Set', `Next follow-up set for ${updates.nextFollowUp}`, timestamp]);
     }
+    
+    if (updates.status === 'Lost' && updates.lossReason) {
+         await db.run(`INSERT INTO lead_history (leadId, action, details, timestamp) VALUES (?, ?, ?, ?)`, 
+            [id, 'Marked Lost', `Reason: ${updates.lossReason}`, timestamp]);
+    }
 
     res.json({ success: true });
   } catch (err) {
@@ -326,36 +369,76 @@ app.delete('/api/leads/:id', async (req, res) => {
     }
 });
 
-app.get('/api/leads/:id/history', async (req, res) => {
-    try {
-        const db = getDb();
-        const history = await db.all('SELECT * FROM lead_history WHERE leadId = ? ORDER BY timestamp DESC', [req.params.id]);
-        res.json(history);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
 app.post('/api/leads/:id/convert', async (req, res) => {
     const leadId = req.params.id;
+    const { machineModel, installationDate, address, createTicket } = req.body;
+
     try {
         const db = getDb();
         const lead = await db.get('SELECT * FROM leads WHERE id = ?', [leadId]);
         
         if (!lead) return res.status(404).json({error: "Lead not found"});
 
-        // Create Customer
-        const customerId = `c${Date.now()}`;
-        await db.run(
-            'INSERT INTO customers (id, name, phone, address, type) VALUES (?, ?, ?, ?, ?)',
-            [customerId, lead.name, lead.phone, lead.address || 'Address pending', 'Guru-Installed']
-        );
+        // 1. Check if Customer Exists
+        const existingCustomer = await db.get('SELECT * FROM customers WHERE phone = ?', [lead.phone]);
+        
+        let customerId;
+        let logDetail = "";
+        const finalAddress = address || lead.address || 'Address pending';
 
-        // Update Lead status to Installed/Sold if not already
+        if (existingCustomer) {
+            // MERGE: Use existing ID
+            customerId = existingCustomer.id;
+            logDetail = `Merged into existing customer (ID: ${customerId})`;
+            
+            // Optionally update address if the one provided in conversion is different/present
+            if (address && address !== existingCustomer.address) {
+                 await db.run('UPDATE customers SET address = ? WHERE id = ?', [address, customerId]);
+            }
+        } else {
+            // CREATE: New Customer
+            customerId = `c${Date.now()}`;
+            logDetail = `Converted to New Customer ID: ${customerId}`;
+            
+            await db.run(
+                'INSERT INTO customers (id, name, phone, address, type) VALUES (?, ?, ?, ?, ?)',
+                [customerId, lead.name, lead.phone, finalAddress, 'Guru-Installed']
+            );
+        }
+
+        // 2. Create Machine (if provided)
+        if (machineModel) {
+            // Calculate warranty default (12 months)
+            const installDate = new Date(installationDate || new Date());
+            const warrantyDate = new Date(installDate);
+            warrantyDate.setFullYear(warrantyDate.getFullYear() + 1);
+            
+            // Calculate AMC Expiry default (12 months)
+            const amcDate = new Date(installDate);
+            amcDate.setFullYear(amcDate.getFullYear() + 1);
+
+            await db.run(
+              `INSERT INTO machines (customerId, modelNo, installationDate, warrantyExpiry, amcActive, amcExpiry) 
+               VALUES (?, ?, ?, ?, ?, ?)`,
+              [customerId, machineModel, installationDate, warrantyDate.toISOString().split('T')[0], 1, amcDate.toISOString().split('T')[0]]
+            );
+        }
+
+        // 3. Create Installation Ticket (if requested)
+        if (createTicket) {
+             const ticketId = `t${Date.now()}`;
+             await db.run(
+                `INSERT INTO tickets (id, customerId, customerName, type, description, priority, status, scheduledDate, totalAmount, itemsUsed, serviceCharge) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [ticketId, customerId, lead.name, 'Installation', `Installation for ${machineModel || 'New Machine'}`, 'Medium', 'Pending', installationDate, 0, '[]', 0]
+             );
+        }
+
+        // 4. Update Lead status
         await db.run('UPDATE leads SET status = ? WHERE id = ?', ['Installed', leadId]);
         
         await db.run(`INSERT INTO lead_history (leadId, action, details, timestamp) VALUES (?, ?, ?, ?)`, 
-            [leadId, 'Converted', `Converted to Customer ID: ${customerId}`, new Date().toISOString()]);
+            [leadId, 'Converted', logDetail, new Date().toISOString()]);
 
         res.json({ success: true, customerId });
     } catch (err) {
@@ -414,6 +497,16 @@ app.post('/api/users', async (req, res) => {
   const { id, name, email, password, role, phone, address, status } = req.body;
   try {
     const db = getDb();
+    
+    // UNIQUE PHONE CHECK
+    if (phone) {
+        const existing = await db.get('SELECT id FROM users WHERE phone = ?', [phone]);
+        if (existing) {
+            return res.status(400).json({ error: 'User with this phone number already exists.' });
+        }
+    }
+    // Note: Email is unique by schema, so SQL will throw error if duplicate
+
     await db.run(
         `INSERT INTO users (id, name, email, password, role, phone, address, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, 
         [id, name, email, password, role, phone || '', address || '', status || 'Active']
@@ -429,6 +522,15 @@ app.put('/api/users/:id', async (req, res) => {
     const id = req.params.id;
     try {
         const db = getDb();
+        
+        // UNIQUE PHONE CHECK on UPDATE
+        if (phone) {
+            const existing = await db.get('SELECT id FROM users WHERE phone = ? AND id != ?', [phone, id]);
+            if (existing) {
+                return res.status(400).json({ error: 'Phone number already in use by another user.' });
+            }
+        }
+
         const updates = [];
         const values = [];
         

@@ -1,16 +1,17 @@
-
 import React, { useState } from 'react';
 import { User, Role } from '../types';
 import { Plus, Shield, User as UserIcon, Mail, Phone, Edit2, Trash2, CheckCircle, XCircle } from 'lucide-react';
+import { ToastType } from './Toast';
 
 interface UserManagementProps {
   users: User[];
   onAddUser: (user: User) => void;
   onUpdateUser: (id: string, updates: Partial<User>) => void;
   onDeleteUser: (id: string) => void;
+  showToast: (msg: string, type: ToastType) => void;
 }
 
-export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser, onUpdateUser, onDeleteUser }) => {
+export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser, onUpdateUser, onDeleteUser, showToast }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
 
@@ -67,7 +68,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onAddUser
     } else {
         // Create
         if (!userData.password) {
-            alert("Password is required for new users.");
+            showToast("Password is required for new users.", "error");
             return;
         }
         onAddUser({

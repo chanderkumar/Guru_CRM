@@ -1,5 +1,5 @@
 
-import { Ticket, Customer, Lead, Part, Machine, LeadStatus, AssignmentHistory, MachineType, User, AmcExpiry, LeadHistory } from './types';
+import { Ticket, Customer, Lead, Part, Machine, LeadStatus, AssignmentHistory, MachineType, User, AmcExpiry, LeadHistory, GlobalSearchResult } from './types';
 import { MOCK_TICKETS, MOCK_CUSTOMERS, MOCK_LEADS, MOCK_PARTS } from './constants';
 
 const API_URL = 'http://localhost:3001/api';
@@ -27,6 +27,11 @@ export const api = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
     });
+  },
+  
+  // --- Search ---
+  searchByPhone: async (phone: string): Promise<GlobalSearchResult> => {
+      return await safeFetch(`${API_URL}/search?phone=${encodeURIComponent(phone)}`);
   },
 
   // --- Initialization ---
@@ -140,8 +145,12 @@ export const api = {
       return await safeFetch(`${API_URL}/leads/${id}/history`);
   },
 
-  convertLeadToCustomer: async (id: string) => {
-      return await safeFetch(`${API_URL}/leads/${id}/convert`, { method: 'POST' });
+  convertLeadToCustomer: async (id: string, details: { machineModel?: string, installationDate?: string, address?: string, createTicket?: boolean }) => {
+      return await safeFetch(`${API_URL}/leads/${id}/convert`, { 
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(details)
+      });
   },
 
   // --- Parts ---
