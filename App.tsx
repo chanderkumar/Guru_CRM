@@ -85,7 +85,7 @@ const App: React.FC = () => {
   const renderSidebarContent = () => (
     <>
       <div className="p-6 border-b border-slate-700">
-        <h1 className="text-2xl font-bold text-red-500">Sai<span className="text-white text-lg font-normal ml-2">Tech</span></h1>
+        <h1 className="text-2xl font-bold text-red-500">Guru<span className="text-white text-lg font-normal ml-2">CRM</span></h1>
         <p className="text-xs text-slate-400 mt-1">Guru Technologies ERP</p>
       </div>
 
