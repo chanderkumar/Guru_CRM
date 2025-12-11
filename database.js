@@ -74,6 +74,23 @@ export async function initDb() {
       price REAL,
       warrantyMonths INTEGER
     );
+
+    CREATE TABLE IF NOT EXISTS machine_types (
+      id TEXT PRIMARY KEY,
+      modelName TEXT,
+      description TEXT,
+      warrantyMonths INTEGER,
+      price REAL
+    );
+
+    CREATE TABLE IF NOT EXISTS ticket_assignment_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ticketId TEXT,
+      technicianId TEXT,
+      assignedAt TEXT,
+      scheduledDate TEXT,
+      FOREIGN KEY(ticketId) REFERENCES tickets(id)
+    );
   `);
   
   console.log("Database initialized and tables checked.");

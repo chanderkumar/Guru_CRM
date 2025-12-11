@@ -1,3 +1,4 @@
+
 export enum Role {
   ADMIN = 'Admin',
   TECHNICIAN = 'Technician',
@@ -47,8 +48,16 @@ export interface Part {
   warrantyMonths: number;
 }
 
+export interface MachineType {
+  id: string;
+  modelName: string;
+  description: string;
+  warrantyMonths: number;
+  price: number;
+}
+
 export interface Machine {
-  modelNo: string;
+  modelNo: string; // This can be the model name or specific serial
   installationDate: string;
   warrantyExpiry: string;
   amcActive: boolean;
@@ -87,6 +96,14 @@ export interface Ticket {
   paymentMode?: PaymentMode;
   technicianNotes?: string;
   nextFollowUp?: string;
+}
+
+export interface AssignmentHistory {
+  id: number;
+  ticketId: string;
+  technicianId: string;
+  assignedAt: string;
+  scheduledDate: string;
 }
 
 export interface Lead {

@@ -1,147 +1,144 @@
-
 import React, { useState, useEffect } from 'react';
 import { USERS } from './constants';
-import { Ticket, User, Role, TicketStatus, Lead, LeadStatus, Customer, Machine, Part } from './types';
+import { Ticket, User, Role, TicketStatus, Lead, LeadStatus, Customer, Machine, Part, MachineType, TicketPriority } from './types';
 import { Dashboard } from './components/Dashboard';
 import { TicketBoard } from './components/TicketBoard';
 import { TechnicianView } from './components/TechnicianView';
 import { SalesFlow } from './components/SalesFlow';
 import { CustomerMaster } from './components/CustomerMaster';
 import { PartsMaster } from './components/PartsMaster';
-import { LayoutDashboard, Ticket as TicketIcon, Users, ShoppingCart, Wrench, Package, Menu, Database, AlertCircle, RefreshCw } from 'lucide-react';
+import { MachineMaster } from './components/MachineMaster';
+import { LayoutDashboard, Ticket as TicketIcon, Users, ShoppingCart, Wrench, Package, Menu, Database, AlertCircle, RefreshCw, Monitor, X } from 'lucide-react';
 import { api } from './api';
 
 const App: React.FC = () => {
-  const [currentUser, setCurrentUser] = useState<User>(USERS[0]);
-  
-  // State for Data
-  const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [parts, setParts] = useState<Part[]>([]);
-  
-  // UI State
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'tickets' | 'sales' | 'technician' | 'customers' | 'parts'>('dashboard');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [currentUser, setCurrentUser] = useState<User>(USERS[0]); // Default Admin
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [isOfflineMode, setIsOfflineMode] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
 
-  // Load Data on Mount
+  // Application State
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [parts, setParts] = useState<Part[]>([]);
+  const [machineTypes, setMachineTypes] = useState<MachineType[]>([]);
+
+  // Technicians (Mock Users)
+  const technicians = USERS.filter(u => u.role === Role.TECHNICIAN);
+
+  // --- Data Loading ---
   useEffect(() => {
     loadData();
   }, []);
 
   const loadData = async () => {
     setIsLoading(true);
-    const data = await api.fetchAllData();
-    setTickets(data.tickets);
-    setCustomers(data.customers);
-    setLeads(data.leads);
-    setParts(data.parts);
-    setIsOfflineMode(data.isOffline);
-    setIsLoading(false);
-  };
-
-  // Technician users helper
-  const technicians = USERS.filter(u => u.role === Role.TECHNICIAN);
-
-  // --- Handlers (Now Async with Error Handling) ---
-
-  const handleAssignTicket = async (ticketId: string, techId: string) => {
-    const previousTickets = [...tickets];
-    const updatedTicket = tickets.find(t => t.id === ticketId);
-    if (!updatedTicket) return;
-    
-    const newTicket = { ...updatedTicket, assignedTechnicianId: techId, status: TicketStatus.ASSIGNED };
-    
-    // Optimistic Update
-    setTickets(prev => prev.map(t => t.id === ticketId ? newTicket : t));
-    
     try {
-      if (!isOfflineMode) await api.updateTicket(newTicket);
-    } catch (error) {
-      console.error("Failed to assign ticket:", error);
-      alert("Failed to assign ticket on server. Reverting changes.");
-      setTickets(previousTickets);
+      const data = await api.fetchAllData();
+      setTickets(data.tickets);
+      setCustomers(data.customers);
+      setLeads(data.leads);
+      setParts(data.parts);
+      setMachineTypes(data.machineTypes);
+      setIsOffline(data.isOffline);
+    } catch (e) {
+      console.error("Failed to load data", e);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleCreateTicket = async (ticket: Partial<Ticket>) => {
-    const previousTickets = [...tickets];
-    const newTicketObj: Ticket = {
+  // --- Handlers ---
+
+  const handleCreateTicket = async (ticketData: Partial<Ticket>) => {
+    const newTicket: Ticket = {
       id: `t${Date.now()}`,
+      customerId: ticketData.customerId!,
+      customerName: ticketData.customerName!,
+      type: ticketData.type || 'Repair',
+      description: ticketData.description || '',
+      priority: ticketData.priority || TicketPriority.MEDIUM,
+      status: TicketStatus.PENDING,
+      scheduledDate: ticketData.scheduledDate || new Date().toISOString().split('T')[0],
       itemsUsed: [],
       serviceCharge: 0,
       totalAmount: 0,
-      status: TicketStatus.PENDING,
-      ...ticket
-    } as Ticket;
-    
-    setTickets([...tickets, newTicketObj]);
-    
+      technicianNotes: '',
+      paymentMode: undefined,
+    };
+
+    // Optimistic Update
+    setTickets(prev => [newTicket, ...prev]);
+
     try {
-      if (!isOfflineMode) await api.createTicket(newTicketObj);
+      await api.createTicket(newTicket);
     } catch (error) {
-      console.error("Failed to create ticket:", error);
-      alert("Failed to create ticket on server. Please try again.");
-      setTickets(previousTickets);
+      alert("Failed to create ticket on server. Reverting.");
+      setTickets(prev => prev.filter(t => t.id !== newTicket.id));
+    }
+  };
+
+  const handleAssignTicket = async (ticketId: string, techId: string, scheduledDate: string) => {
+    const ticketIndex = tickets.findIndex(t => t.id === ticketId);
+    if (ticketIndex === -1) return;
+
+    const oldTicket = tickets[ticketIndex];
+    const updatedTicket = { 
+        ...oldTicket, 
+        status: TicketStatus.ASSIGNED, 
+        assignedTechnicianId: techId,
+        scheduledDate: scheduledDate 
+    };
+
+    setTickets(prev => {
+      const newTickets = [...prev];
+      newTickets[ticketIndex] = updatedTicket;
+      return newTickets;
+    });
+
+    try {
+      await api.updateTicket(updatedTicket);
+    } catch (error) {
+      alert("Failed to assign ticket on server. Reverting.");
+      setTickets(prev => {
+        const reverted = [...prev];
+        reverted[ticketIndex] = oldTicket;
+        return reverted;
+      });
     }
   };
 
   const handleUpdateTicket = async (updatedTicket: Ticket) => {
-    const previousTickets = [...tickets];
+    const ticketIndex = tickets.findIndex(t => t.id === updatedTicket.id);
+    const oldTicket = tickets[ticketIndex];
+
     setTickets(prev => prev.map(t => t.id === updatedTicket.id ? updatedTicket : t));
-    
+
     try {
-      if (!isOfflineMode) await api.updateTicket(updatedTicket);
+      await api.updateTicket(updatedTicket);
     } catch (error) {
-      console.error("Failed to update ticket:", error);
-      alert("Failed to save ticket update. Reverting changes.");
-      setTickets(previousTickets);
+      alert("Failed to update ticket on server. Reverting.");
+      setTickets(prev => {
+          const reverted = [...prev];
+          reverted[ticketIndex] = oldTicket;
+          return reverted;
+      });
     }
   };
 
-  const handleAddLead = async (lead: Lead) => {
-    const previousLeads = [...leads];
-    setLeads([...leads, lead]);
-    
+  const handleAddCustomer = async (newCustomer: Customer) => {
+    setCustomers(prev => [...prev, newCustomer]);
     try {
-      if (!isOfflineMode) await api.createLead(lead);
+      await api.createCustomer(newCustomer);
     } catch (error) {
-      console.error("Failed to add lead:", error);
-      alert("Failed to save lead to server. Please try again.");
-      setLeads(previousLeads);
-    }
-  };
-
-  const handleUpdateLeadStatus = async (id: string, status: LeadStatus, extraData: Partial<Lead> = {}) => {
-    const previousLeads = [...leads];
-    setLeads(prev => prev.map(l => l.id === id ? { ...l, status, ...extraData } : l));
-    
-    try {
-      if (!isOfflineMode) await api.updateLeadStatus(id, status, extraData);
-    } catch (error) {
-      console.error("Failed to update lead status:", error);
-      alert("Failed to update lead status on server. Reverting.");
-      setLeads(previousLeads);
-    }
-  };
-
-  const handleAddCustomer = async (customer: Customer) => {
-    const previousCustomers = [...customers];
-    setCustomers([...customers, customer]);
-    
-    try {
-      if (!isOfflineMode) await api.createCustomer(customer);
-    } catch (error) {
-      console.error("Failed to add customer:", error);
-      alert("Failed to save customer to server. Please try again.");
-      setCustomers(previousCustomers);
+      alert("Failed to save customer. Reverting.");
+      setCustomers(prev => prev.filter(c => c.id !== newCustomer.id));
     }
   };
 
   const handleAddMachine = async (customerId: string, machine: Machine) => {
-    const previousCustomers = [...customers];
     setCustomers(prev => prev.map(c => {
       if (c.id === customerId) {
         return { ...c, machines: [...c.machines, machine] };
@@ -150,189 +147,206 @@ const App: React.FC = () => {
     }));
     
     try {
-      if (!isOfflineMode) await api.addMachine(customerId, machine);
+      await api.addMachine(customerId, machine);
     } catch (error) {
-      console.error("Failed to add machine:", error);
-      alert("Failed to save machine details. Reverting.");
-      setCustomers(previousCustomers);
+      alert("Failed to add machine. Reverting.");
+      loadData(); // Reload to sync
     }
   };
-  
-  const handleAddPart = async (part: Part) => {
-    const previousParts = [...parts];
-    setParts([...parts, part]);
-    
+
+  const handleAddLead = async (lead: Lead) => {
+    setLeads(prev => [...prev, lead]);
     try {
-      if (!isOfflineMode) await api.createPart(part);
+      await api.createLead(lead);
     } catch (error) {
-      console.error("Failed to add part:", error);
-      alert("Failed to save part to server. Please try again.");
-      setParts(previousParts);
+      alert("Failed to save lead. Reverting.");
+      setLeads(prev => prev.filter(l => l.id !== lead.id));
     }
   };
 
-  useEffect(() => {
-    if (currentUser.role === Role.TECHNICIAN) {
-      setActiveTab('technician');
-    } else if (activeTab === 'technician') {
-      setActiveTab('dashboard');
-    }
-  }, [currentUser, activeTab]);
+  const handleUpdateLeadStatus = async (id: string, status: LeadStatus, extraData?: Partial<Lead>) => {
+    const leadIndex = leads.findIndex(l => l.id === id);
+    const oldLead = leads[leadIndex];
+    
+    const updatedLead = { ...oldLead, status, ...extraData };
+    setLeads(prev => prev.map(l => l.id === id ? updatedLead : l));
 
-  const navigate = (tab: typeof activeTab) => {
-    setActiveTab(tab);
-    setIsSidebarOpen(false);
+    try {
+      await api.updateLeadStatus(id, status, extraData);
+    } catch (error) {
+      alert("Failed to update lead. Reverting.");
+      setLeads(prev => {
+          const reverted = [...prev];
+          reverted[leadIndex] = oldLead;
+          return reverted;
+      });
+    }
+  };
+
+  const handleAddPart = async (part: Part) => {
+    setParts(prev => [...prev, part]);
+    try {
+      await api.createPart(part);
+    } catch (error) {
+      alert("Failed to save part. Reverting.");
+      setParts(prev => prev.filter(p => p.id !== part.id));
+    }
+  };
+
+  const handleAddMachineType = async (type: MachineType) => {
+      setMachineTypes(prev => [...prev, type]);
+      try {
+          await api.createMachineType(type);
+      } catch (error) {
+          alert("Failed to save machine type. Reverting.");
+          setMachineTypes(prev => prev.filter(m => m.id !== type.id));
+      }
   }
 
-  const renderSidebarContent = () => (
-    <>
-      <div className="p-6 border-b border-slate-700">
-        <h1 className="text-2xl font-bold text-red-500">Guru<span className="text-white text-lg font-normal ml-2">CRM</span></h1>
-        <p className="text-xs text-slate-400 mt-1">Guru Technologies ERP</p>
-      </div>
+  // --- Navigation Items ---
+  const navItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, role: [Role.ADMIN, Role.MANAGER] },
+    { id: 'tickets', label: 'Service Tickets', icon: TicketIcon, role: [Role.ADMIN, Role.MANAGER, Role.TECHNICIAN] },
+    { id: 'sales', label: 'Sales Pipeline', icon: Users, role: [Role.ADMIN, Role.MANAGER] },
+    { id: 'customers', label: 'Customer Master', icon: Database, role: [Role.ADMIN, Role.MANAGER] },
+    { id: 'parts', label: 'Parts Master', icon: Package, role: [Role.ADMIN, Role.MANAGER] },
+    { id: 'machines', label: 'Machine Master', icon: Monitor, role: [Role.ADMIN, Role.MANAGER] },
+    { id: 'technician', label: 'Technician View', icon: Wrench, role: [Role.TECHNICIAN] },
+  ];
 
-      <nav className="flex-1 p-4 space-y-2">
-        {currentUser.role !== Role.TECHNICIAN && (
-          <>
-            <button onClick={() => navigate('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'dashboard' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}>
-              <LayoutDashboard size={20} /> Dashboard
-            </button>
-            <button onClick={() => navigate('tickets')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'tickets' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}>
-              <TicketIcon size={20} /> Service Tickets
-            </button>
-            <button onClick={() => navigate('sales')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'sales' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}>
-              <ShoppingCart size={20} /> Sales Pipeline
-            </button>
-            <button onClick={() => navigate('customers')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'customers' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}>
-              <Users size={20} /> Customers
-            </button>
-             <button onClick={() => navigate('parts')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'parts' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}>
-              <Package size={20} /> Parts Master
-            </button>
-          </>
-        )}
-        
-        {currentUser.role === Role.TECHNICIAN && (
-           <button onClick={() => navigate('technician')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'technician' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}>
-           <Wrench size={20} /> My Work
-         </button>
-        )}
-      </nav>
-      
-      {/* Server Status Indicator */}
-      <div className="p-4 border-t border-slate-700 bg-slate-900/50">
-        <div className="flex items-center gap-2 text-xs">
-          <Database size={14} className={isOfflineMode ? "text-orange-500" : "text-green-500"} />
-          <span className="text-slate-300">
-            {isOfflineMode ? "Running in Mock Mode" : "Connected to SQL DB"}
-          </span>
-        </div>
-        {isOfflineMode && (
-          <button onClick={loadData} className="mt-2 text-xs text-blue-400 flex items-center gap-1 hover:text-blue-300">
-            <RefreshCw size={12} /> Retry Connection
-          </button>
-        )}
-      </div>
-
-      <div className="p-4 border-t border-slate-700">
-        <div className="flex items-center gap-3 px-4 py-2">
-          <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center font-bold">
-            {currentUser.name.charAt(0)}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{currentUser.name}</p>
-            <p className="text-xs text-slate-400 truncate">{currentUser.role}</p>
-          </div>
-        </div>
-      </div>
-    </>
-  );
+  const visibleNavItems = navItems.filter(item => item.role.includes(currentUser.role));
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 flex-col gap-4">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        <p className="text-gray-500 font-medium">Loading ERP System...</p>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      {/* Sidebar - Static for large screens */}
-      <aside className="w-64 bg-slate-900 text-white hidden md:flex flex-col fixed h-full z-20">
-        {renderSidebarContent()}
-      </aside>
+    <div className="min-h-screen flex flex-col md:flex-row">
+      {/* Mobile Header */}
+      <div className="md:hidden bg-white p-4 flex justify-between items-center shadow-sm z-20 relative">
+        <div className="flex items-center gap-2 font-bold text-gray-800">
+          <Menu className="cursor-pointer" onClick={() => setSidebarOpen(true)} />
+          <span>GuruTech ERP</span>
+        </div>
+        <div className="flex items-center gap-2">
+            {isOffline && <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded-full flex items-center gap-1"><AlertCircle size={12}/> Offline Mode</span>}
+             <select 
+              className="text-xs bg-gray-100 border-none rounded p-1"
+              value={currentUser.id}
+              onChange={(e) => {
+                const user = USERS.find(u => u.id === e.target.value);
+                if (user) {
+                   setCurrentUser(user);
+                   setActiveTab(user.role === Role.TECHNICIAN ? 'technician' : 'dashboard');
+                }
+              }}
+            >
+              {USERS.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
+            </select>
+        </div>
+      </div>
 
-      {/* Mobile Sidebar Overlay */}
-      {isSidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-30 md:hidden"
-          onClick={() => setIsSidebarOpen(false)}
-          aria-hidden="true"
-        ></div>
+      {/* Sidebar Overlay for Mobile */}
+      {sidebarOpen && (
+        <div 
+            className="fixed inset-0 bg-black/50 z-30 md:hidden"
+            onClick={() => setSidebarOpen(false)}
+        />
       )}
 
-      {/* Sidebar - Mobile slide-in */}
-      <aside
-        className={`fixed top-0 left-0 h-full w-64 bg-slate-900 text-white flex flex-col z-40 transition-transform transform ${
-          isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } md:hidden`}
-      >
-        {renderSidebarContent()}
+      {/* Sidebar */}
+      <aside className={`
+        fixed inset-y-0 left-0 z-40 w-64 bg-slate-800 text-white transform transition-transform duration-300 ease-in-out
+        md:relative md:translate-x-0
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+      `}>
+        <div className="p-6 flex justify-between items-center">
+          <h1 className="text-xl font-bold tracking-wider">GuruTech ERP</h1>
+          <button onClick={() => setSidebarOpen(false)} className="md:hidden text-gray-400">
+             <X size={20} />
+          </button>
+        </div>
+        
+        <nav className="mt-6 px-4 space-y-2">
+          {visibleNavItems.map(item => (
+            <button
+              key={item.id}
+              onClick={() => { setActiveTab(item.id); setSidebarOpen(false); }}
+              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                activeTab === item.id ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              <item.icon size={20} />
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div className="absolute bottom-0 w-full p-4 bg-slate-900">
+           <div className="flex items-center gap-3 mb-4 px-2">
+              <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center font-bold">
+                {currentUser.name.charAt(0)}
+              </div>
+              <div>
+                <p className="text-sm font-medium">{currentUser.name}</p>
+                <p className="text-xs text-slate-400">{currentUser.role}</p>
+              </div>
+           </div>
+
+           {/* User Switcher (For Demo) */}
+           <label className="text-xs text-slate-500 block mb-1">Switch User (Demo):</label>
+           <select 
+            className="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm text-slate-300 outline-none"
+            value={currentUser.id}
+            onChange={(e) => {
+              const user = USERS.find(u => u.id === e.target.value);
+              if (user) {
+                 setCurrentUser(user);
+                 setActiveTab(user.role === Role.TECHNICIAN ? 'technician' : 'dashboard');
+              }
+            }}
+          >
+            {USERS.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+        </div>
       </aside>
 
-
       {/* Main Content */}
-      <main className="flex-1 md:ml-64 p-4 md:p-8">
-        
-        {/* Top Bar with Role Switching and Mobile Menu */}
-        <header className="flex justify-between items-center mb-8 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <button className="md:hidden text-gray-600" onClick={() => setIsSidebarOpen(true)}>
-            <Menu size={24} />
-          </button>
-          <div className="md:hidden font-bold text-gray-800">GuruTech ERP</div>
-          
-          <div className="flex items-center gap-4 ml-auto">
-            {isOfflineMode && (
-               <div className="hidden sm:flex items-center gap-1 text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded-full border border-orange-200">
-                 <AlertCircle size={14} /> Server Offline - Changes will not be saved
-               </div>
+      <main className="flex-1 h-[calc(100vh-60px)] md:h-screen overflow-y-auto bg-gray-50 p-4 md:p-8">
+        <div className="max-w-7xl mx-auto animate-fade-in">
+            {isOffline && (
+                <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative" role="alert">
+                    <strong className="font-bold">Offline Mode: </strong>
+                    <span className="block sm:inline">Cannot connect to server. Using local mock data. Changes will not be saved permanently.</span>
+                </div>
             )}
-            <span className="text-sm text-gray-500 hidden md:inline">Viewing as:</span>
-            <select 
-              className="bg-gray-100 border-none rounded-lg px-3 py-1.5 text-sm font-medium cursor-pointer focus:ring-2 focus:ring-blue-500 outline-none"
-              value={currentUser.id}
-              onChange={(e) => setCurrentUser(USERS.find(u => u.id === e.target.value) || USERS[0])}
-            >
-              {USERS.map(u => (
-                <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
-              ))}
-            </select>
-          </div>
-        </header>
 
-        {/* Content Area */}
-        <div className="animate-fade-in">
           {activeTab === 'dashboard' && <Dashboard tickets={tickets} />}
+          
           {activeTab === 'tickets' && (
             <TicketBoard 
               tickets={tickets} 
-              technicians={technicians} 
-              onAssign={handleAssignTicket} 
-              onCreateTicket={handleCreateTicket}
+              technicians={technicians}
               customers={customers}
+              onAssign={handleAssignTicket}
+              onCreateTicket={handleCreateTicket}
               onAddCustomer={handleAddCustomer}
             />
           )}
+
           {activeTab === 'technician' && (
             <TechnicianView 
               tickets={tickets} 
-              parts={parts} 
+              parts={parts}
               onUpdateTicket={handleUpdateTicket}
               currentUserId={currentUser.id}
             />
           )}
+
           {activeTab === 'sales' && (
             <SalesFlow 
               leads={leads}
@@ -340,18 +354,30 @@ const App: React.FC = () => {
               onUpdateStatus={handleUpdateLeadStatus}
             />
           )}
+
           {activeTab === 'customers' && (
-             <CustomerMaster 
-               customers={customers} 
-               onAddCustomer={handleAddCustomer}
-               onAddMachine={handleAddMachine}
-             />
+            <CustomerMaster 
+              customers={customers}
+              tickets={tickets}
+              machineTypes={machineTypes}
+              onAddCustomer={handleAddCustomer}
+              onAddMachine={handleAddMachine}
+              onCreateTicket={handleCreateTicket}
+            />
           )}
+
           {activeTab === 'parts' && (
-             <PartsMaster 
-               parts={parts} 
-               onAddPart={handleAddPart}
-             />
+            <PartsMaster 
+              parts={parts}
+              onAddPart={handleAddPart}
+            />
+          )}
+
+          {activeTab === 'machines' && (
+              <MachineMaster
+                machineTypes={machineTypes}
+                onAddMachineType={handleAddMachineType}
+              />
           )}
         </div>
       </main>

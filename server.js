@@ -34,6 +34,7 @@ app.get('/api/init', async (req, res) => {
 
     const leads = await db.all('SELECT * FROM leads');
     const parts = await db.all('SELECT * FROM parts');
+    const machineTypes = await db.all('SELECT * FROM machine_types');
     
     // Parse JSON fields for tickets (itemsUsed)
     const ticketsParsed = tickets.map(t => ({
@@ -41,7 +42,7 @@ app.get('/api/init', async (req, res) => {
       itemsUsed: t.itemsUsed ? JSON.parse(t.itemsUsed) : []
     }));
 
-    res.json({ tickets: ticketsParsed, customers, leads, parts });
+    res.json({ tickets: ticketsParsed, customers, leads, parts, machineTypes });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -56,7 +57,7 @@ app.post('/api/tickets', async (req, res) => {
     await db.run(
       `INSERT INTO tickets (id, customerId, customerName, type, description, priority, status, scheduledDate, totalAmount, itemsUsed, serviceCharge) 
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, customerId, customerName, type, description, priority, status, scheduledDate, totalAmount, JSON.stringify(itemsUsed), serviceCharge]
+      [id, customerId, customerName, type, description, priority, status, scheduledDate, totalAmount, JSON.stringify(itemsUsed || []), serviceCharge]
     );
     res.json({ success: true });
   } catch (err) {
@@ -64,28 +65,72 @@ app.post('/api/tickets', async (req, res) => {
   }
 });
 
+// Robust Dynamic Update Endpoint
 app.put('/api/tickets/:id', async (req, res) => {
-  const { status, assignedTechnicianId, itemsUsed, serviceCharge, totalAmount, completedDate, paymentMode, technicianNotes, nextFollowUp } = req.body;
   try {
     const db = getDb();
-    await db.run(
-      `UPDATE tickets SET 
-       status = COALESCE(?, status), 
-       assignedTechnicianId = COALESCE(?, assignedTechnicianId),
-       itemsUsed = COALESCE(?, itemsUsed),
-       serviceCharge = COALESCE(?, serviceCharge),
-       totalAmount = COALESCE(?, totalAmount),
-       completedDate = COALESCE(?, completedDate),
-       paymentMode = COALESCE(?, paymentMode),
-       technicianNotes = COALESCE(?, technicianNotes),
-       nextFollowUp = COALESCE(?, nextFollowUp)
-       WHERE id = ?`,
-      [status, assignedTechnicianId, itemsUsed ? JSON.stringify(itemsUsed) : null, serviceCharge, totalAmount, completedDate, paymentMode, technicianNotes, nextFollowUp, req.params.id]
-    );
+    const id = req.params.id;
+    const data = req.body;
+
+    // Define allowed columns to prevent SQL injection or invalid column errors
+    const allowedColumns = [
+      'customerId', 'customerName', 'type', 'description', 'priority', 'status', 
+      'assignedTechnicianId', 'scheduledDate', 'completedDate', 'itemsUsed', 
+      'serviceCharge', 'totalAmount', 'paymentMode', 'technicianNotes', 'nextFollowUp'
+    ];
+
+    const updates = [];
+    const values = [];
+
+    // Dynamically build the SET clause based on fields present in req.body
+    for (const col of allowedColumns) {
+      if (data[col] !== undefined) {
+        updates.push(`${col} = ?`);
+        let val = data[col];
+        // Ensure array/objects are stringified for TEXT columns
+        if ((col === 'itemsUsed') && typeof val === 'object') {
+            val = JSON.stringify(val);
+        }
+        values.push(val);
+      }
+    }
+
+    if (updates.length === 0) {
+      return res.json({ success: true, message: "No fields to update" });
+    }
+
+    values.push(id); // Add ID for the WHERE clause
+    const sql = `UPDATE tickets SET ${updates.join(', ')} WHERE id = ?`;
+
+    console.log(`[Update Ticket] ID: ${id}, Fields: ${updates.join(', ')}`);
+    
+    await db.run(sql, values);
+
+    // --- History Tracking ---
+    // If assignedTechnicianId or scheduledDate is changing, log it.
+    if (data.assignedTechnicianId && data.scheduledDate) {
+        await db.run(
+            `INSERT INTO ticket_assignment_history (ticketId, technicianId, assignedAt, scheduledDate) VALUES (?, ?, ?, ?)`,
+            [id, data.assignedTechnicianId, new Date().toISOString(), data.scheduledDate]
+        );
+        console.log(`[History] Logged assignment for ticket ${id}`);
+    }
+
     res.json({ success: true });
   } catch (err) {
+    console.error("Update Ticket Error:", err);
     res.status(500).json({ error: err.message });
   }
+});
+
+app.get('/api/tickets/:id/history', async (req, res) => {
+    try {
+        const db = getDb();
+        const history = await db.all('SELECT * FROM ticket_assignment_history WHERE ticketId = ? ORDER BY assignedAt DESC', [req.params.id]);
+        res.json(history);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // --- Customers ---
@@ -133,10 +178,18 @@ app.put('/api/leads/:id', async (req, res) => {
   const { status, nextFollowUp, estimateValue } = req.body;
   try {
     const db = getDb();
-    await db.run(
-      'UPDATE leads SET status = ?, nextFollowUp = COALESCE(?, nextFollowUp), estimateValue = COALESCE(?, estimateValue) WHERE id = ?',
-      [status, nextFollowUp, estimateValue, req.params.id]
-    );
+    // Simple dynamic update for leads
+    const updates = [];
+    const values = [];
+    if (status !== undefined) { updates.push('status = ?'); values.push(status); }
+    if (nextFollowUp !== undefined) { updates.push('nextFollowUp = ?'); values.push(nextFollowUp); }
+    if (estimateValue !== undefined) { updates.push('estimateValue = ?'); values.push(estimateValue); }
+    
+    values.push(req.params.id);
+    
+    if (updates.length > 0) {
+        await db.run(`UPDATE leads SET ${updates.join(', ')} WHERE id = ?`, values);
+    }
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -151,6 +204,21 @@ app.post('/api/parts', async (req, res) => {
     await db.run(
       'INSERT INTO parts (id, name, category, price, warrantyMonths) VALUES (?, ?, ?, ?, ?)',
       [id, name, category, price, warrantyMonths]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Machine Master ---
+app.post('/api/machine-types', async (req, res) => {
+  const { id, modelName, description, warrantyMonths, price } = req.body;
+  try {
+    const db = getDb();
+    await db.run(
+      'INSERT INTO machine_types (id, modelName, description, warrantyMonths, price) VALUES (?, ?, ?, ?, ?)',
+      [id, modelName, description, warrantyMonths, price]
     );
     res.json({ success: true });
   } catch (err) {

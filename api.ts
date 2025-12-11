@@ -1,5 +1,5 @@
 
-import { Ticket, Customer, Lead, Part, Machine, LeadStatus } from './types';
+import { Ticket, Customer, Lead, Part, Machine, LeadStatus, AssignmentHistory, MachineType } from './types';
 import { MOCK_TICKETS, MOCK_CUSTOMERS, MOCK_LEADS, MOCK_PARTS } from './constants';
 
 const API_URL = 'http://localhost:3001/api';
@@ -26,6 +26,7 @@ export const api = {
         customers: data.customers as Customer[],
         leads: data.leads as Lead[],
         parts: data.parts as Part[],
+        machineTypes: (data.machineTypes || []) as MachineType[],
         isOffline: false
       };
     } catch (error) {
@@ -35,6 +36,7 @@ export const api = {
         customers: MOCK_CUSTOMERS,
         leads: MOCK_LEADS,
         parts: MOCK_PARTS,
+        machineTypes: [],
         isOffline: true
       };
     }
@@ -55,6 +57,15 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(ticket),
     });
+  },
+
+  getTicketHistory: async (ticketId: string): Promise<AssignmentHistory[]> => {
+      try {
+          return await safeFetch(`${API_URL}/tickets/${ticketId}/history`);
+      } catch (e) {
+          console.warn("Failed to fetch history, returning empty array");
+          return [];
+      }
   },
 
   // --- Customers ---
@@ -97,6 +108,15 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(part),
+    });
+  },
+
+  // --- Machine Types (Master) ---
+  createMachineType: async (machineType: MachineType) => {
+    return await safeFetch(`${API_URL}/machine-types`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(machineType),
     });
   },
 };

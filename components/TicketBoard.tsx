@@ -1,12 +1,14 @@
+
 import React, { useState } from 'react';
-import { Customer, Ticket, TicketPriority, TicketStatus, User, CustomerType } from '../types';
-import { Calendar, User as UserIcon, AlertCircle, Plus, Building, Search } from 'lucide-react';
+import { Customer, Ticket, TicketPriority, TicketStatus, User, CustomerType, AssignmentHistory } from '../types';
+import { Calendar, User as UserIcon, AlertCircle, Plus, Building, Search, X, Edit2, History as HistoryIcon, Clock } from 'lucide-react';
+import { api } from '../api';
 
 interface TicketBoardProps {
   tickets: Ticket[];
   technicians: User[];
   customers: Customer[];
-  onAssign: (ticketId: string, techId: string) => void;
+  onAssign: (ticketId: string, techId: string, scheduledDate: string) => void;
   onCreateTicket: (ticket: Partial<Ticket>) => void;
   onAddCustomer: (customer: Customer) => void;
 }
@@ -16,6 +18,20 @@ export const TicketBoard: React.FC<TicketBoardProps> = ({ tickets, technicians, 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isQuickAddCustomerOpen, setQuickAddCustomerOpen] = useState(false);
   
+  // Assignment Modal State
+  const [assignModal, setAssignModal] = useState<{
+    ticketId: string;
+    techId: string;
+    techName: string;
+    isReschedule?: boolean;
+  } | null>(null);
+  const [assignDateTime, setAssignDateTime] = useState('');
+  
+  // History Modal State
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [currentTicketHistory, setCurrentTicketHistory] = useState<AssignmentHistory[]>([]);
+  const [currentTicketIdForHistory, setCurrentTicketIdForHistory] = useState<string | null>(null);
+
   const [newTicket, setNewTicket] = useState<{
     customerId: string;
     machineModelNo: string;
@@ -61,6 +77,51 @@ export const TicketBoard: React.FC<TicketBoardProps> = ({ tickets, technicians, 
     setNewCustomer({ name: '', phone: '', address: '' });
   };
 
+  const handleTechSelect = (ticket: Ticket, techId: string) => {
+    const tech = technicians.find(t => t.id === techId);
+    if (!tech) return;
+
+    // Use existing scheduled date if available, otherwise current date/time
+    const initialDate = ticket.scheduledDate && ticket.scheduledDate.includes('T') 
+      ? ticket.scheduledDate 
+      : `${new Date().toISOString().split('T')[0]}T09:00`;
+
+    setAssignDateTime(initialDate);
+    setAssignModal({
+      ticketId: ticket.id,
+      techId: techId,
+      techName: tech.name,
+      isReschedule: ticket.status === TicketStatus.ASSIGNED
+    });
+  };
+
+  const confirmAssignment = () => {
+    if (assignModal && assignDateTime) {
+      onAssign(assignModal.ticketId, assignModal.techId, assignDateTime);
+      setAssignModal(null);
+      setAssignDateTime('');
+    }
+  };
+
+  const fetchAndShowHistory = async (ticketId: string) => {
+      setCurrentTicketIdForHistory(ticketId);
+      setHistoryModalOpen(true);
+      setCurrentTicketHistory([]); // clear prev
+      const history = await api.getTicketHistory(ticketId);
+      setCurrentTicketHistory(history);
+  };
+
+  const formatDisplayDate = (dateStr: string) => {
+    if (!dateStr) return 'Not Scheduled';
+    if (dateStr.includes('T')) {
+      return new Date(dateStr).toLocaleString('en-IN', { 
+        year: 'numeric', month: 'short', day: 'numeric', 
+        hour: '2-digit', minute: '2-digit' 
+      });
+    }
+    return dateStr;
+  };
+
 
   return (
     <div className="space-y-6">
@@ -104,6 +165,14 @@ export const TicketBoard: React.FC<TicketBoardProps> = ({ tickets, technicians, 
                 }`}>
                   {ticket.priority}
                 </span>
+                {/* History Button */}
+                <button 
+                  onClick={() => fetchAndShowHistory(ticket.id)}
+                  className="flex items-center gap-1 text-gray-400 hover:text-blue-600 transition-colors ml-auto"
+                  title="View Assignment History"
+                >
+                  <HistoryIcon size={14} /> History
+                </button>
               </div>
               <p className="text-gray-600 text-sm mt-2">{ticket.description}</p>
             </div>
@@ -114,7 +183,7 @@ export const TicketBoard: React.FC<TicketBoardProps> = ({ tickets, technicians, 
               <div className="flex items-center justify-between sm:justify-start sm:items-end gap-4">
                 <div className="text-sm">
                   <p className="text-gray-500">Scheduled</p>
-                  <p className="font-medium text-gray-800">{ticket.scheduledDate}</p>
+                  <p className="font-medium text-gray-800">{formatDisplayDate(ticket.scheduledDate)}</p>
                 </div>
                 <span className={`px-2 py-1 text-xs font-bold rounded-full h-fit ${
                   ticket.status === TicketStatus.COMPLETED ? 'bg-green-100 text-green-700' : 
@@ -133,7 +202,7 @@ export const TicketBoard: React.FC<TicketBoardProps> = ({ tickets, technicians, 
                     <label className="text-xs text-gray-500 font-medium">Assign Technician</label>
                     <select 
                       className="border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none w-full"
-                      onChange={(e) => onAssign(ticket.id, e.target.value)}
+                      onChange={(e) => handleTechSelect(ticket, e.target.value)}
                       value={ticket.assignedTechnicianId || ''}
                     >
                       <option value="">Select...</option>
@@ -148,6 +217,16 @@ export const TicketBoard: React.FC<TicketBoardProps> = ({ tickets, technicians, 
                     <div className="flex items-center justify-end sm:justify-start gap-2 font-medium text-green-700">
                       <UserIcon size={14} />
                       {technicians.find(t => t.id === ticket.assignedTechnicianId)?.name || 'Unknown'}
+                      {/* Reschedule Button */}
+                      {(ticket.status === TicketStatus.ASSIGNED) && (
+                          <button 
+                            onClick={() => handleTechSelect(ticket, ticket.assignedTechnicianId!)} 
+                            className="p-1 text-gray-400 hover:text-blue-600 bg-gray-50 rounded"
+                            title="Reschedule / Reassign"
+                          >
+                              <Edit2 size={14} />
+                          </button>
+                      )}
                     </div>
                   </div>
                 ) : null}
@@ -163,10 +242,114 @@ export const TicketBoard: React.FC<TicketBoardProps> = ({ tickets, technicians, 
         )}
       </div>
 
-      {/* Create Modal */}
+      {/* Assignment/Reschedule Modal */}
+      {assignModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold">{assignModal.isReschedule ? 'Reschedule Ticket' : 'Confirm Assignment'}</h3>
+              <button onClick={() => setAssignModal(null)} className="text-gray-400 hover:text-gray-600">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <p className="text-gray-600 text-sm mb-4">
+              {assignModal.isReschedule ? 'Updating assignment for' : 'Assigning ticket to'} <span className="font-bold text-gray-800">{assignModal.techName}</span>.
+            </p>
+
+            <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Technician</label>
+                <select 
+                    className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                    value={assignModal.techId}
+                    onChange={(e) => {
+                        const newTech = technicians.find(t => t.id === e.target.value);
+                        setAssignModal({
+                            ...assignModal, 
+                            techId: e.target.value, 
+                            techName: newTech?.name || ''
+                        });
+                    }}
+                >
+                    {technicians.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Service Date & Time</label>
+              <input 
+                type="datetime-local" 
+                className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                value={assignDateTime}
+                onChange={(e) => setAssignDateTime(e.target.value)}
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setAssignModal(null)}
+                className="flex-1 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={confirmAssignment}
+                className="flex-1 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg font-medium"
+              >
+                {assignModal.isReschedule ? 'Update' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* History Modal */}
+      {historyModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-fade-in">
+           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 max-h-[80vh] overflow-y-auto">
+             <div className="flex justify-between items-center mb-4 border-b pb-2">
+                <h3 className="text-lg font-bold">Assignment History</h3>
+                <button onClick={() => setHistoryModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                    <X size={20} />
+                </button>
+             </div>
+             
+             <div className="space-y-4">
+                {currentTicketHistory.length === 0 ? (
+                    <p className="text-gray-500 text-center py-4">No history found.</p>
+                ) : (
+                    currentTicketHistory.map((h, index) => {
+                        const tech = technicians.find(t => t.id === h.technicianId);
+                        return (
+                            <div key={h.id} className="relative flex gap-4">
+                                <div className="flex flex-col items-center">
+                                    <div className={`w-3 h-3 rounded-full ${index === 0 ? 'bg-blue-600' : 'bg-gray-300'}`}></div>
+                                    {index !== currentTicketHistory.length - 1 && <div className="w-0.5 h-full bg-gray-200 my-1"></div>}
+                                </div>
+                                <div className="pb-4">
+                                    <p className="font-semibold text-gray-800 text-sm">
+                                        Assigned to {tech ? tech.name : 'Unknown Tech'}
+                                    </p>
+                                    <p className="text-xs text-gray-500 flex items-center gap-1 mt-1">
+                                        <Calendar size={12}/> Scheduled: {formatDisplayDate(h.scheduledDate)}
+                                    </p>
+                                    <p className="text-xs text-gray-400 mt-1">
+                                        Updated: {new Date(h.assignedAt).toLocaleString()}
+                                    </p>
+                                </div>
+                            </div>
+                        )
+                    })
+                )}
+             </div>
+           </div>
+        </div>
+      )}
+
+      {/* Create Ticket Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold mb-4">Create New Ticket</h3>
             <form onSubmit={handleCreateSubmit} className="space-y-4">
               
